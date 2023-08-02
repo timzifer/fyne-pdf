@@ -1,1 +1,291 @@
 package pdf
+
+import (
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/widget"
+	"github.com/cockroachdb/errors"
+	"github.com/gen2brain/go-fitz"
+	"gitlab.com/eshaker/golang/fyne/lucide_icons"
+	"gitlab.com/eshaker/golang/fyne/tabler_icons"
+	"image"
+	"image/color"
+	"io"
+	"math"
+	"sync"
+)
+
+type (
+	Document struct {
+		widget.BaseWidget
+
+		document *fitz.Document
+
+		thumbnails []*Thumbnail
+
+		bigPage *Page
+
+		base               *fyne.Container
+		thumbnailContainer *fyne.Container
+		thumbnailScroller  *container.Scroll
+		toolbar            *fyne.Container
+		zoom               binding.Float
+		scrollContainer    *container.Scroll
+
+		BackgroundColor color.Color
+		SaveCallback    func()
+
+		mutex                  sync.Mutex
+		toggleThumbnailsButton *widget.Button
+		zoomInButton           *widget.Button
+		zoomOutButton          *widget.Button
+		saveButton             *widget.Button
+	}
+)
+
+func (d *Document) CreateRenderer() fyne.WidgetRenderer {
+	d.ExtendBaseWidget(d)
+	return widget.NewSimpleRenderer(d.base)
+}
+
+var (
+	_ fyne.Widget = (*Document)(nil)
+	_ io.Closer   = (*Document)(nil)
+)
+
+func NewDocument() *Document {
+	d := &Document{
+		thumbnailContainer: container.NewHBox(),
+		toolbar:            container.NewHBox(),
+		zoom:               binding.NewFloat(),
+	}
+
+	d.thumbnailScroller = container.NewHScroll(d.thumbnailContainer)
+
+	d.bigPage = NewPage(d.renderer)
+	d.scrollContainer = container.NewScroll(d.bigPage)
+
+	zoomSlider := widget.NewSliderWithData(0.2, 4, d.zoom)
+	zoomSlider.Step = 0.
+
+	resetZoomButton := widget.NewButton("100%", func() {
+		d.Zoom(1)
+	})
+	resetZoomButton.Importance = widget.LowImportance
+
+	fitButton := widget.NewButton("", func() {
+		d.ZoomToFit()
+	})
+	fitButton.Icon = lucide_icons.MustIcon("maximize-2")
+	fitButton.Importance = widget.LowImportance
+
+	fitVerticalButton := widget.NewButton("", func() {
+		d.ZoomToFitVertical()
+	})
+	fitVerticalButton.Icon = tabler_icons.MustIcon("arrow-autofit-height")
+	fitVerticalButton.Importance = widget.LowImportance
+
+	fitHorizontalButton := widget.NewButton("", func() {
+		d.ZoomToFitHorizontal()
+	})
+	fitHorizontalButton.Icon = tabler_icons.MustIcon("arrow-autofit-width")
+	fitHorizontalButton.Importance = widget.LowImportance
+
+	d.toggleThumbnailsButton = widget.NewButton("", func() {
+		if d.thumbnailScroller.Visible() {
+			d.toggleThumbnailsButton.Icon = lucide_icons.MustIcon("toggle-left")
+			d.toggleThumbnailsButton.Refresh()
+			d.thumbnailScroller.Hide()
+		} else {
+			d.toggleThumbnailsButton.Icon = lucide_icons.MustIcon("toggle-right")
+			d.toggleThumbnailsButton.Refresh()
+			d.thumbnailScroller.Show()
+		}
+	})
+	d.toggleThumbnailsButton.Icon = lucide_icons.MustIcon("toggle-right")
+	d.toggleThumbnailsButton.Importance = widget.LowImportance
+
+	d.zoomInButton = widget.NewButton("", func() {
+		if current, err := d.zoom.Get(); err == nil {
+			d.zoom.Set(math.Min(zoomSlider.Max, current+0.25))
+		}
+	})
+	d.zoomInButton.Icon = lucide_icons.MustIcon("zoom-in")
+	d.zoomInButton.Importance = widget.LowImportance
+
+	d.zoomOutButton = widget.NewButton("", func() {
+		if current, err := d.zoom.Get(); err == nil {
+			d.zoom.Set(math.Max(zoomSlider.Min, current-0.25))
+		}
+	})
+	d.zoomOutButton.Icon = lucide_icons.MustIcon("zoom-out")
+	d.zoomOutButton.Importance = widget.LowImportance
+
+	d.saveButton = widget.NewButton("", func() {
+	})
+	d.saveButton.Icon = lucide_icons.MustIcon("save")
+	d.saveButton.Importance = widget.LowImportance
+	d.saveButton.Hidden = true
+
+	d.toolbar.Add(d.toggleThumbnailsButton)
+	d.toolbar.Add(layout.NewSpacer())
+	d.toolbar.Add(d.zoomOutButton)
+	d.toolbar.Add(zoomSlider)
+	d.toolbar.Add(d.zoomInButton)
+	d.toolbar.Add(resetZoomButton)
+	d.toolbar.Add(fitButton)
+	d.toolbar.Add(fitVerticalButton)
+	d.toolbar.Add(fitHorizontalButton)
+	d.toolbar.Add(d.saveButton)
+
+	d.base = container.NewBorder(
+		nil,
+		container.NewVBox(
+			d.toolbar,
+			d.thumbnailScroller,
+		),
+		nil, nil,
+		d.scrollContainer,
+	)
+
+	d.ExtendBaseWidget(d)
+
+	d.zoom.AddListener(binding.NewDataListener(func() {
+		factor, _ := d.zoom.Get()
+		//d.bigPage.SetScaleFactor(factor)
+		if factor != d.bigPage.Scale {
+			d.bigPage.Scale = factor
+			d.scrollContainer.Refresh()
+			d.Refresh()
+		}
+
+		if factor <= zoomSlider.Min {
+			d.zoomOutButton.Disable()
+		} else {
+			d.zoomOutButton.Enable()
+		}
+
+		if factor >= zoomSlider.Max {
+			d.zoomInButton.Disable()
+		} else {
+			d.zoomInButton.Enable()
+		}
+
+	}))
+
+	return d
+}
+
+func (d *Document) Close() error {
+	if d.document != nil {
+		return d.document.Close()
+	}
+	return nil
+}
+
+func (d *Document) LoadFromMemory(contents []byte) error {
+
+	if doc, err := fitz.NewFromMemory(contents); err != nil {
+		return errors.Wrap(err, "could not open pdf from memory")
+	} else {
+		return d.load(doc)
+	}
+}
+
+func (d *Document) renderer(pageNum int, size fyne.Size) (image.Image, error) {
+
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	if d.document == nil {
+		return nil, nil
+	}
+	// TODO choose dpi for size
+	return d.document.ImageDPI(pageNum, 144)
+}
+
+func (d *Document) load(document *fitz.Document) error {
+
+	defer func() {
+		d.bigPage.ReplaceWithPageNumber(0)
+		d.ZoomToFit()
+	}()
+
+	// close previous document
+	if d.document != nil && d.document != document {
+		// TODO Log
+		_ = d.document.Close()
+	}
+	d.document = document
+
+	numPage := document.NumPage() // cache
+	for pageNumber := 0; pageNumber < numPage; pageNumber++ {
+		localPageNumber := pageNumber
+		newPage := NewThumbnail(d.renderer)
+		newPage.PageNumber = pageNumber
+		newPage.OnTapped = func() {
+			d.bigPage.ReplaceWithPageNumber(localPageNumber)
+			d.ZoomToFit()
+		}
+
+		d.thumbnailContainer.Objects = append(d.thumbnailContainer.Objects, newPage)
+		d.thumbnails = append(d.thumbnails, newPage)
+	}
+	if numPage <= 1 {
+		d.toggleThumbnailsButton.Hide()
+		d.thumbnailScroller.Hide()
+	} else {
+		d.toggleThumbnailsButton.Show()
+		d.thumbnailScroller.Show()
+	}
+
+	// finally load first page to big page
+	return nil
+	//return d.bigPage.SetPage(document, 0)
+}
+
+func (d *Document) Refresh() {
+	d.bigPage.BackgroundColor = d.BackgroundColor
+
+	if d.SaveCallback != nil {
+		d.saveButton.OnTapped = d.SaveCallback
+		d.saveButton.Show()
+	} else {
+		d.saveButton.Hide()
+	}
+
+	d.bigPage.Refresh()
+	d.scrollContainer.Refresh()
+	d.thumbnailContainer.Refresh()
+	d.base.Refresh()
+}
+
+func (d *Document) Zoom(scale float64) {
+	_ = d.zoom.Set(scale)
+}
+
+func (d *Document) ZoomToFit() {
+
+	imageSize := d.bigPage.PageSize()
+
+	scaleX := d.scrollContainer.Size().Width / imageSize.Width
+	scaleY := d.scrollContainer.Size().Height / imageSize.Height
+
+	if scaleX < scaleY {
+		_ = d.zoom.Set(float64(scaleX))
+	} else {
+		_ = d.zoom.Set(float64(scaleY))
+	}
+}
+
+func (d *Document) ZoomToFitVertical() {
+	imageSize := d.bigPage.PageSize()
+	_ = d.zoom.Set(float64(d.scrollContainer.Size().Height / imageSize.Height))
+}
+
+func (d *Document) ZoomToFitHorizontal() {
+	imageSize := d.bigPage.PageSize()
+	_ = d.zoom.Set(float64(d.scrollContainer.Size().Width / imageSize.Width))
+}
