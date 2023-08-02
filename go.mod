@@ -5,7 +5,7 @@ go 1.20
 require (
 	fyne.io/fyne/v2 v2.3.5
 	github.com/cockroachdb/errors v1.10.0
-	github.com/gen2brain/go-fitz v1.22.2
+	github.com/gen2brain/go-fitz v1.20.2
 	gitlab.com/eshaker/golang/fyne/lucide_icons v1.0.0
 	gitlab.com/eshaker/golang/fyne/tabler_icons v1.0.0
 )
