@@ -7,13 +7,16 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/cockroachdb/errors"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/gen2brain/go-fitz"
 	"gitlab.com/eshaker/golang/fyne/lucide_icons"
 	"gitlab.com/eshaker/golang/fyne/tabler_icons"
+	"golang.org/x/sync/errgroup"
 	"image"
 	"image/color"
 	"io"
 	"math"
+	"strconv"
 	"sync"
 )
 
@@ -64,7 +67,7 @@ func NewDocument() *Document {
 
 	d.thumbnailScroller = container.NewHScroll(d.thumbnailContainer)
 
-	d.bigPage = NewPage(d.renderer)
+	d.bigPage = NewPage()
 	d.scrollContainer = container.NewScroll(d.bigPage)
 
 	zoomSlider := widget.NewSliderWithData(0.2, 4, d.zoom)
@@ -180,6 +183,8 @@ func NewDocument() *Document {
 
 func (d *Document) Close() error {
 	if d.document != nil {
+		MuPDFMutex.Lock()
+		defer MuPDFMutex.Unlock()
 		return d.document.Close()
 	}
 	return nil
@@ -187,11 +192,13 @@ func (d *Document) Close() error {
 
 func (d *Document) LoadFromMemory(contents []byte) error {
 
-	if doc, err := fitz.NewFromMemory(contents); err != nil {
+	MuPDFMutex.Lock()
+	doc, err := fitz.NewFromMemory(contents)
+	MuPDFMutex.Unlock()
+	if err != nil {
 		return errors.Wrap(err, "could not open pdf from memory")
-	} else {
-		return d.load(doc)
 	}
+	return d.load(doc)
 }
 
 func (d *Document) renderer(pageNum int, size fyne.Size) (image.Image, error) {
@@ -202,6 +209,9 @@ func (d *Document) renderer(pageNum int, size fyne.Size) (image.Image, error) {
 	if d.document == nil {
 		return nil, nil
 	}
+
+	MuPDFMutex.Lock()
+	defer MuPDFMutex.Unlock()
 	// TODO choose dpi for size
 	return d.document.ImageDPI(pageNum, 144)
 }
@@ -209,10 +219,12 @@ func (d *Document) renderer(pageNum int, size fyne.Size) (image.Image, error) {
 func (d *Document) load(document *fitz.Document) error {
 
 	defer func() {
-		d.bigPage.ReplaceWithPageNumber(0)
-		d.ZoomToFit()
+		if len(d.thumbnails) > 0 {
+			d.thumbnails[0].OnTapped()
+		}
 	}()
 
+	MuPDFMutex.Lock()
 	// close previous document
 	if d.document != nil && d.document != document {
 		// TODO Log
@@ -221,13 +233,31 @@ func (d *Document) load(document *fitz.Document) error {
 	d.document = document
 
 	numPage := document.NumPage() // cache
+	MuPDFMutex.Unlock()
+
+	eg := errgroup.Group{}
 	for pageNumber := 0; pageNumber < numPage; pageNumber++ {
 		localPageNumber := pageNumber
-		newPage := NewThumbnail(d.renderer)
-		newPage.PageNumber = pageNumber
+		newPage := NewThumbnail()
+		eg.Go(func() error {
+			if img, err := d.renderer(localPageNumber, fyne.Size{
+				Width:  200,
+				Height: 200,
+			}); err != nil {
+				return err
+			} else {
+				newPage.SetImage(img)
+				newPage.SetTitle(strconv.Itoa(localPageNumber))
+				return nil
+			}
+		})
 		newPage.OnTapped = func() {
-			d.bigPage.ReplaceWithPageNumber(localPageNumber)
-			d.ZoomToFit()
+			if img, err := d.renderer(localPageNumber, d.bigPage.Size()); err != nil {
+				spew.Dump(err)
+			} else {
+				d.bigPage.SetImage(img)
+				d.ZoomToFit()
+			}
 		}
 
 		d.thumbnailContainer.Objects = append(d.thumbnailContainer.Objects, newPage)
@@ -242,8 +272,7 @@ func (d *Document) load(document *fitz.Document) error {
 	}
 
 	// finally load first page to big page
-	return nil
-	//return d.bigPage.SetPage(document, 0)
+	return eg.Wait()
 }
 
 func (d *Document) Refresh() {

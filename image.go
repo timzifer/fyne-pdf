@@ -8,7 +8,13 @@ import (
 
 type DocumentCallbackFn func(document *fitz.Document)
 
+// NewImageFromMemory rendert eine PDF-Seite. Läuft komplett unter dem
+// MuPDFMutex - documentCallbacks werden also unter dem Lock aufgerufen und
+// dürfen ihn nicht selbst nehmen.
 func NewImageFromMemory(contents []byte, pageNumber int, documentCallbacks ...DocumentCallbackFn) (image.Image, error) {
+	MuPDFMutex.Lock()
+	defer MuPDFMutex.Unlock()
+
 	if doc, err := fitz.NewFromMemory(contents); err != nil {
 		return nil, errors.Wrap(err, "could not open pdf from memory")
 	} else {
