@@ -181,13 +181,24 @@ func NewDocument() *Document {
 	return d
 }
 
+// Close gibt das MuPDF-Dokument frei und nilt den Pointer unter d.mutex.
+// Ohne das Nilen rendern noch laufende load()-Goroutinen (oder ein späterer
+// Thumbnail-Tap) auf dem freigegebenen fz_context weiter - Use-after-free,
+// der im CEF-Prozess als MuPDF-Abort ("aborting process from uncaught
+// error!") endet.
 func (d *Document) Close() error {
-	if d.document != nil {
-		MuPDFMutex.Lock()
-		defer MuPDFMutex.Unlock()
-		return d.document.Close()
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	if d.document == nil {
+		return nil
 	}
-	return nil
+
+	MuPDFMutex.Lock()
+	defer MuPDFMutex.Unlock()
+	err := d.document.Close()
+	d.document = nil
+	return err
 }
 
 func (d *Document) LoadFromMemory(contents []byte) error {

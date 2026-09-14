@@ -16,8 +16,6 @@ type (
 
 		Scale           float64
 		BackgroundColor color.Color
-
-		renderer PageRenderer
 	}
 
 	pageRenderer struct {
@@ -90,20 +88,33 @@ func (p *Page) PageSize() fyne.Size {
 	}
 }
 
-func (p *Page) ReplaceWithPageNumber(pageNumber int) error {
-	if img, err := p.renderer(pageNumber, p.Size()); err != nil {
-		return err
-	} else {
-		p.image.Image = img
-		p.image.Refresh()
-		p.Refresh()
-		return nil
-	}
+func (p *Page) SetImage(pageImage image.Image) {
+	p.image.Image = pageImage
+	p.image.Refresh()
+	p.Refresh()
 }
 
-func NewPage(renderer PageRenderer) *Page {
+/*
+	func (p *Page) ReplaceWithPageNumber(pageNumber int) error {
+		if img, err := p.renderer(pageNumber, p.Size()); err != nil {
+			return err
+		} else {
+			p.image.Image = img
+			p.image.Refresh()
+			p.Refresh()
+			return nil
+		}
+	}
+*/
+
+func NewPageWithImage(img image.Image) *Page {
+	p := NewPage()
+	p.SetImage(img)
+	return p
+}
+
+func NewPage() *Page {
 	p := &Page{
-		renderer: renderer,
 		image: &canvas.Image{
 			FillMode:  canvas.ImageFillContain,
 			ScaleMode: canvas.ImageScaleFastest,

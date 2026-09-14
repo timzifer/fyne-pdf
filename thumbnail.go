@@ -5,26 +5,75 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
-	"strconv"
+	"image"
 )
 
-type Thumbnail struct {
-	widget.BaseWidget
+type (
+	Thumbnail struct {
+		widget.BaseWidget
 
-	page  *canvas.Image
-	label *widget.Label
+		base *fyne.Container
 
-	base *fyne.Container
+		page  *Page
+		label *widget.Label
 
-	PageNumber         int
-	previousPageNumber int
-	OnTapped           func()
+		OnTapped    func()
+		minimumSize fyne.Size
+	}
 
-	renderer PageRenderer
+	thumbnailRenderer struct {
+		thumbnail *Thumbnail
+	}
+)
+
+const ThumbnailMinimumDimension = float32(100)
+
+func (t *thumbnailRenderer) Destroy() {
 }
 
-var _ fyne.Widget = (*Thumbnail)(nil)
-var _ fyne.Tappable = (*Thumbnail)(nil)
+func (t *thumbnailRenderer) Layout(size fyne.Size) {
+
+	t.thumbnail.page.Move(fyne.Position{
+		X: 0,
+		Y: 0,
+	})
+	t.thumbnail.page.Resize(t.thumbnail.minimumSize)
+
+	t.thumbnail.label.Move(fyne.Position{
+		X: 0,
+		Y: size.Height - t.thumbnail.label.MinSize().Height,
+	})
+	t.thumbnail.label.Resize(fyne.Size{
+		Width:  size.Width,
+		Height: t.thumbnail.label.MinSize().Height,
+	})
+}
+
+func (t *thumbnailRenderer) MinSize() fyne.Size {
+	width := t.thumbnail.minimumSize.Width
+	if t.thumbnail.label.MinSize().Width > width {
+		width = t.thumbnail.label.MinSize().Width
+	}
+	return fyne.Size{
+		Width:  width,
+		Height: t.thumbnail.minimumSize.Height + t.thumbnail.label.MinSize().Height,
+	}
+}
+
+func (t *thumbnailRenderer) Objects() []fyne.CanvasObject {
+	return []fyne.CanvasObject{
+		t.thumbnail.page,
+		t.thumbnail.label,
+	}
+}
+
+func (t *thumbnailRenderer) Refresh() {
+
+	t.Layout(t.thumbnail.Size())
+	canvas.Refresh(t.thumbnail)
+}
+
+var _ fyne.WidgetRenderer = (*thumbnailRenderer)(nil)
 
 func (t *Thumbnail) Tapped(_ *fyne.PointEvent) {
 	if t.OnTapped != nil {
@@ -32,42 +81,40 @@ func (t *Thumbnail) Tapped(_ *fyne.PointEvent) {
 	}
 }
 
+func (t *Thumbnail) SetTitle(title string) {
+	t.label.SetText(title)
+	t.Refresh()
+}
+
+func (t *Thumbnail) SetImage(theImage image.Image) {
+	t.page.SetImage(theImage)
+	t.page.Refresh()
+	t.Refresh()
+}
+
 func (t *Thumbnail) CreateRenderer() fyne.WidgetRenderer {
 	t.ExtendBaseWidget(t)
-	return widget.NewSimpleRenderer(t.base)
+	return &thumbnailRenderer{thumbnail: t}
 }
 
-func NewThumbnail(renderer PageRenderer) *Thumbnail {
+func (t *Thumbnail) SetMinimumSize(size fyne.Size) {
+	t.minimumSize = size
+}
+
+var _ fyne.Widget = (*Thumbnail)(nil)
+var _ fyne.Tappable = (*Thumbnail)(nil)
+
+func NewThumbnail() *Thumbnail {
 	t := &Thumbnail{
-		page: &canvas.Image{
-			FillMode:  canvas.ImageFillContain,
-			ScaleMode: canvas.ImageScaleFastest,
+		label: widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		page:  NewPage(),
+		minimumSize: fyne.Size{
+			Width:  ThumbnailMinimumDimension,
+			Height: ThumbnailMinimumDimension,
 		},
-		label:              widget.NewLabelWithStyle("0", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		renderer:           renderer,
-		previousPageNumber: -1,
 	}
-	t.page.SetMinSize(fyne.Size{
-		Width:  200,
-		Height: 200,
-	})
-	t.base = container.NewVBox(container.NewMax(t.page), t.label)
+	t.base = container.NewBorder(nil, t.label, nil, nil, t.page)
+	t.page.image.ScaleMode = canvas.ImageScaleSmooth
 	t.ExtendBaseWidget(t)
-
 	return t
-}
-
-func (t *Thumbnail) Refresh() {
-
-	if t.previousPageNumber != t.PageNumber || t.page.Image == nil {
-		t.label.Text = strconv.Itoa(t.PageNumber + 1)
-
-		if nil == t.page.Image {
-			t.page.Image, _ = t.renderer(t.PageNumber, t.Size().Max(t.page.MinSize()))
-		}
-
-		t.previousPageNumber = t.PageNumber
-	}
-
-	t.base.Refresh()
 }
