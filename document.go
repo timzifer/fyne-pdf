@@ -9,8 +9,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gen2brain/go-fitz"
-	"github.com/timzifer/fyne-lucide-icons"
-	"github.com/timzifer/fyne-tabler-icons"
+	"github.com/timzifer/fyne_lucide"
+	"github.com/timzifer/fyne_tabler"
 	"golang.org/x/sync/errgroup"
 	"image"
 	"image/color"
@@ -81,33 +81,33 @@ func NewDocument() *Document {
 	fitButton := widget.NewButton("", func() {
 		d.ZoomToFit()
 	})
-	fitButton.Icon = lucide_icons.MustIcon("maximize-2")
+	fitButton.Icon = fyne_lucide.Icon(fyne_lucide.IconMaximize2)
 	fitButton.Importance = widget.LowImportance
 
 	fitVerticalButton := widget.NewButton("", func() {
 		d.ZoomToFitVertical()
 	})
-	fitVerticalButton.Icon = tabler_icons.MustIcon("arrow-autofit-height")
+	fitVerticalButton.Icon = fyne_tabler.Icon(fyne_tabler.IconArrowAutofitHeight)
 	fitVerticalButton.Importance = widget.LowImportance
 
 	fitHorizontalButton := widget.NewButton("", func() {
 		d.ZoomToFitHorizontal()
 	})
-	fitHorizontalButton.Icon = tabler_icons.MustIcon("arrow-autofit-width")
+	fitHorizontalButton.Icon = fyne_tabler.Icon(fyne_tabler.IconArrowAutofitWidth)
 	fitHorizontalButton.Importance = widget.LowImportance
 
 	d.toggleThumbnailsButton = widget.NewButton("", func() {
 		if d.thumbnailScroller.Visible() {
-			d.toggleThumbnailsButton.Icon = lucide_icons.MustIcon("toggle-left")
+			d.toggleThumbnailsButton.Icon = fyne_lucide.Icon(fyne_lucide.IconToggleLeft)
 			d.toggleThumbnailsButton.Refresh()
 			d.thumbnailScroller.Hide()
 		} else {
-			d.toggleThumbnailsButton.Icon = lucide_icons.MustIcon("toggle-right")
+			d.toggleThumbnailsButton.Icon = fyne_lucide.Icon(fyne_lucide.IconToggleRight)
 			d.toggleThumbnailsButton.Refresh()
 			d.thumbnailScroller.Show()
 		}
 	})
-	d.toggleThumbnailsButton.Icon = lucide_icons.MustIcon("toggle-right")
+	d.toggleThumbnailsButton.Icon = fyne_lucide.Icon(fyne_lucide.IconToggleRight)
 	d.toggleThumbnailsButton.Importance = widget.LowImportance
 
 	d.zoomInButton = widget.NewButton("", func() {
@@ -115,7 +115,7 @@ func NewDocument() *Document {
 			d.zoom.Set(math.Min(zoomSlider.Max, current+0.25))
 		}
 	})
-	d.zoomInButton.Icon = lucide_icons.MustIcon("zoom-in")
+	d.zoomInButton.Icon = fyne_lucide.Icon(fyne_lucide.IconZoomIn)
 	d.zoomInButton.Importance = widget.LowImportance
 
 	d.zoomOutButton = widget.NewButton("", func() {
@@ -123,12 +123,12 @@ func NewDocument() *Document {
 			d.zoom.Set(math.Max(zoomSlider.Min, current-0.25))
 		}
 	})
-	d.zoomOutButton.Icon = lucide_icons.MustIcon("zoom-out")
+	d.zoomOutButton.Icon = fyne_lucide.Icon(fyne_lucide.IconZoomOut)
 	d.zoomOutButton.Importance = widget.LowImportance
 
 	d.saveButton = widget.NewButton("", func() {
 	})
-	d.saveButton.Icon = lucide_icons.MustIcon("save")
+	d.saveButton.Icon = fyne_lucide.Icon(fyne_lucide.IconSave)
 	d.saveButton.Importance = widget.LowImportance
 	d.saveButton.Hidden = true
 
