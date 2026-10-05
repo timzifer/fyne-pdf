@@ -2,6 +2,8 @@ package pdf
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"image/color"
 	"sync"
@@ -168,4 +170,67 @@ func TestSourceBoundRotatedCropped(t *testing.T) {
 	if s := img.Bounds().Size(); s.X != 800 || s.Y != 600 {
 		t.Fatalf("image size = %v, want 800x600", s)
 	}
+}
+
+func TestSourceMetadata(t *testing.T) {
+	pdf := minimalPDF()
+	// Append an info dictionary as incremental update.
+	var buf bytes.Buffer
+	buf.Write(pdf)
+	info := buf.Len()
+	fmt.Fprintf(&buf, "5 0 obj\n<< /Title (Plan) /Author <FEFF00470072006F00DF> >>\nendobj\n")
+	xref := buf.Len()
+	prev := bytes.LastIndex(pdf, []byte("startxref\n"))
+	var prevXref int
+	if _, err := fmt.Sscanf(string(pdf[prev+len("startxref\n"):]), "%d", &prevXref); err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprintf(&buf, "xref\n5 1\n%010d 00000 n \n", info)
+	fmt.Fprintf(&buf, "trailer\n<< /Size 6 /Root 1 0 R /Info 5 0 R /Prev %d >>\nstartxref\n%d\n%%%%EOF\n", prevXref, xref)
+
+	src, err := OpenSource(buf.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := src.Metadata()
+	if meta["title"] != "Plan" || meta["author"] != "Groß" {
+		t.Fatalf("Metadata = %v, want title Plan, author Groß", meta)
+	}
+
+	if m := mustOpen(t, minimalPDF()).Metadata(); len(m) != 0 {
+		t.Errorf("Metadata without info = %v, want empty", m)
+	}
+	_ = src.Close()
+	if m := src.Metadata(); len(m) != 0 {
+		t.Errorf("Metadata after Close = %v, want empty", m)
+	}
+}
+
+func TestRenderPageContextCancelled(t *testing.T) {
+	src := mustOpen(t, minimalPDF())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := src.RenderPageContext(ctx, 0, 72); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+}
+
+func TestSourceBoundErrors(t *testing.T) {
+	src := mustOpen(t, minimalPDF())
+	if _, err := src.Bound(3); err == nil {
+		t.Error("expected error for page out of range")
+	}
+	_ = src.Close()
+	if _, err := src.Bound(0); err == nil {
+		t.Error("expected error on closed source")
+	}
+}
+
+func mustOpen(t *testing.T, contents []byte) *Source {
+	t.Helper()
+	src, err := OpenSource(contents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return src
 }
