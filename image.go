@@ -16,6 +16,7 @@ func NewImageFromMemory(contents []byte, pageNumber int, documentCallbacks ...Do
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = src.Close() }()
 
 	for _, cb := range documentCallbacks {
 		cb(src)

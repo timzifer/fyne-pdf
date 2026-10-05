@@ -56,8 +56,19 @@ func (s *Source) PageCount() int {
 // background. If rendering takes longer than 15 seconds, the partially drawn
 // image is returned without an error.
 func (s *Source) RenderPage(page int, dpi float64) (image.Image, error) {
+	return s.RenderPageContext(context.Background(), page, dpi)
+}
+
+// RenderPageContext is like [Source.RenderPage], but stops early and returns
+// ctx.Err() when ctx is cancelled.
+func (s *Source) RenderPageContext(ctx context.Context, page int, dpi float64) (image.Image, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Renders cancelled while waiting for the lock return right away.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	if s.doc == nil {
 		return nil, errors.New("pdf source is closed")
@@ -74,7 +85,7 @@ func (s *Source) RenderPage(page int, dpi float64) (image.Image, error) {
 
 	scale := dpi / 72
 	dst := image.NewRGBA(p.Bounds(scale))
-	err = p.Render(context.Background(), dst, cera.RenderOptions{
+	err = p.Render(ctx, dst, cera.RenderOptions{
 		Scale:      scale,
 		Background: paper,
 		Deadline:   time.Now().Add(renderTimeout),
@@ -82,6 +93,8 @@ func (s *Source) RenderPage(page int, dpi float64) (image.Image, error) {
 	var panicErr *cera.PanicError
 	switch {
 	case err == nil:
+	case ctx.Err() != nil:
+		return nil, ctx.Err()
 	case errors.As(err, &panicErr):
 		return nil, errors.Wrapf(err, "could not render pdf-page %d", page)
 	default:

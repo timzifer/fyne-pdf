@@ -1,19 +1,23 @@
 package pdf
 
 import (
+	"image"
+	"image/color"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/widget"
-	"image"
-	"image/color"
 )
 
 type (
-	// Page displays a single rendered page image, scaled by Scale.
+	// Page displays a single rendered page image. Its minimum size is
+	// [Page.PageSize] multiplied by Scale; the image is scaled to fit, so
+	// it can be rendered at any resolution. The aspect ratio is kept.
 	Page struct {
 		widget.BaseWidget
 
-		image *canvas.Image
+		image    *canvas.Image
+		pageSize fyne.Size
 
 		Scale           float64
 		BackgroundColor color.Color
@@ -32,26 +36,15 @@ func (p *pageRenderer) Destroy() {
 }
 
 func (p *pageRenderer) Layout(size fyne.Size) {
-	p.background.Move(fyne.Position{
-		X: 0,
-		Y: 0,
-	})
+	p.background.Move(fyne.Position{})
 	p.background.Resize(size)
-	p.background.Refresh()
 
-	p.pageWidget.image.Move(fyne.Position{
-		X: 0,
-		Y: 0,
-	})
+	p.pageWidget.image.Move(fyne.Position{})
 	p.pageWidget.image.Resize(size)
-	p.pageWidget.image.Refresh()
-
 }
 
 func (p *pageRenderer) MinSize() fyne.Size {
-
 	size := p.pageWidget.PageSize()
-
 	return fyne.Size{
 		Width:  size.Width * float32(p.pageWidget.Scale),
 		Height: size.Height * float32(p.pageWidget.Scale),
@@ -66,11 +59,11 @@ func (p *pageRenderer) Objects() []fyne.CanvasObject {
 }
 
 func (p *pageRenderer) Refresh() {
-
 	p.background.FillColor = p.pageWidget.BackgroundColor
+	p.background.Refresh()
 
 	p.Layout(p.pageWidget.Size())
-	canvas.Refresh(p.pageWidget)
+	p.pageWidget.image.Refresh()
 }
 
 func (p *Page) CreateRenderer() fyne.WidgetRenderer {
@@ -81,34 +74,31 @@ func (p *Page) CreateRenderer() fyne.WidgetRenderer {
 	}
 }
 
-// PageSize returns the size of the page image in pixels.
+// PageSize returns the size of the page at Scale 1. Unless set with
+// [Page.SetPageSize], this is the size of the page image in pixels.
 func (p *Page) PageSize() fyne.Size {
-	imageSize := p.image.Image.Bounds().Max
+	if !p.pageSize.IsZero() {
+		return p.pageSize
+	}
+	imageSize := p.image.Image.Bounds().Size()
 	return fyne.Size{
 		Width:  float32(imageSize.X),
 		Height: float32(imageSize.Y),
 	}
 }
 
-// SetImage replaces the displayed page image.
-func (p *Page) SetImage(pageImage image.Image) {
-	p.image.Image = pageImage
-	p.image.Refresh()
+// SetPageSize sets the size of the page at Scale 1, independent of the
+// resolution of the image.
+func (p *Page) SetPageSize(size fyne.Size) {
+	p.pageSize = size
 	p.Refresh()
 }
 
-/*
-	func (p *Page) ReplaceWithPageNumber(pageNumber int) error {
-		if img, err := p.renderer(pageNumber, p.Size()); err != nil {
-			return err
-		} else {
-			p.image.Image = img
-			p.image.Refresh()
-			p.Refresh()
-			return nil
-		}
-	}
-*/
+// SetImage replaces the displayed page image.
+func (p *Page) SetImage(pageImage image.Image) {
+	p.image.Image = pageImage
+	p.Refresh()
+}
 
 // NewPageWithImage creates a Page showing img.
 func NewPageWithImage(img image.Image) *Page {
@@ -122,18 +112,10 @@ func NewPage() *Page {
 	p := &Page{
 		image: &canvas.Image{
 			FillMode:  canvas.ImageFillContain,
-			ScaleMode: canvas.ImageScaleFastest,
-			Image: image.NewGray(image.Rectangle{
-				Min: image.Point{
-					X: 0,
-					Y: 0,
-				},
-				Max: image.Point{
-					X: 0,
-					Y: 0,
-				},
-			}),
+			ScaleMode: canvas.ImageScaleSmooth,
+			Image:     image.NewGray(image.Rectangle{}),
 		},
+		Scale: 1,
 	}
 	p.ExtendBaseWidget(p)
 	return p
