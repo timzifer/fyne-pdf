@@ -1,6 +1,7 @@
 # fyne-pdf
 
 [![CI](https://github.com/timzifer/fyne-pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/timzifer/fyne-pdf/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/timzifer/fyne-pdf/badges/coverage.json)](https://github.com/timzifer/fyne-pdf/actions/workflows/ci.yml?query=branch%3Amain)
 [![Go Reference](https://pkg.go.dev/badge/github.com/timzifer/fyne-pdf.svg)](https://pkg.go.dev/github.com/timzifer/fyne-pdf)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
