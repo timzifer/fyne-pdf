@@ -7,7 +7,7 @@ require (
 	github.com/cockroachdb/errors v1.10.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/go-pdfkit/reader v0.6.0
-	github.com/go-pdfkit/render v0.66.0
+	github.com/timzifer/cera v0.0.0-20261005073925-deffc6968131
 	github.com/timzifer/fyne_lucide v1.2.0
 	github.com/timzifer/fyne_tabler v1.2.0
 	golang.org/x/sync v0.23.0
@@ -20,10 +20,9 @@ require (
 	github.com/fredbi/uri v1.1.0 // indirect
 	github.com/fyne-io/gl-js v0.1.0 // indirect
 	github.com/getsentry/sentry-go v0.18.0 // indirect
-	github.com/go-gfx/gfx v0.34.0 // indirect
 	github.com/go-gl/gl v0.0.0-20231021071112-07e5d0ea2e71 // indirect
-	github.com/go-images/jpeg v0.1.0 // indirect
-	github.com/go-images/jpeg2000 v0.12.0 // indirect
+	github.com/go-images/jpeg v0.2.0 // indirect
+	github.com/go-images/jpeg2000 v0.13.2 // indirect
 	github.com/go-opentype/fonts v0.10.0 // indirect
 	github.com/go-opentype/opentype v0.13.0 // indirect
 	github.com/go-pdfkit/pdffont v0.3.1 // indirect
@@ -36,12 +35,11 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.5.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
-	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
-	github.com/sergeymakinen/go-ico v1.0.0 // indirect
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/tannevaled/gobig2 v0.2.0 // indirect
 	github.com/timzifer/fyne_iconkit v0.1.0 // indirect
+	github.com/timzifer/stilus v0.7.1-0.20261004051204-eaa0881d5596 // indirect
 	github.com/yuin/goldmark v1.7.8 // indirect
 	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/net v0.37.0 // indirect
