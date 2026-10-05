@@ -1,7 +1,6 @@
 # fyne-pdf
 
 [![CI](https://github.com/timzifer/fyne-pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/timzifer/fyne-pdf/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/timzifer/fyne-pdf/graph/badge.svg)](https://codecov.io/gh/timzifer/fyne-pdf)
 [![Go Reference](https://pkg.go.dev/badge/github.com/timzifer/fyne-pdf.svg)](https://pkg.go.dev/github.com/timzifer/fyne-pdf)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 

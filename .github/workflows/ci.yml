@@ -48,13 +48,26 @@ jobs:
         if: runner.os == 'Linux'
         run: go test -race -coverprofile=coverage.out ./...
 
-      - name: Upload coverage
+      - name: Coverage report
         if: runner.os == 'Linux'
-        uses: codecov/codecov-action@v5
+        run: |
+          go tool cover -html=coverage.out -o coverage.html
+          {
+            echo "## Coverage: $(go tool cover -func=coverage.out | awk '/^total:/ {print $3}')"
+            echo
+            echo '```'
+            go tool cover -func=coverage.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
         with:
-          files: coverage.out
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
+          name: coverage
+          path: |
+            coverage.out
+            coverage.html
 
   lint:
     name: Lint
