@@ -8,7 +8,6 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/cockroachdb/errors"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/gen2brain/go-fitz"
 	"github.com/timzifer/fyne_lucide"
 	"github.com/timzifer/fyne_tabler"
 	"golang.org/x/sync/errgroup"
@@ -24,7 +23,7 @@ type (
 	Document struct {
 		widget.BaseWidget
 
-		document *fitz.Document
+		source *Source
 
 		thumbnails []*Thumbnail
 
@@ -181,53 +180,38 @@ func NewDocument() *Document {
 	return d
 }
 
-// Close gibt das MuPDF-Dokument frei und nilt den Pointer unter d.mutex.
-// Ohne das Nilen rendern noch laufende load()-Goroutinen (oder ein späterer
-// Thumbnail-Tap) auf dem freigegebenen fz_context weiter - Use-after-free,
-// der im CEF-Prozess als MuPDF-Abort ("aborting process from uncaught
-// error!") endet.
+// Close gibt das Dokument frei. Danach liefert renderer (nil, nil).
 func (d *Document) Close() error {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 
-	if d.document == nil {
-		return nil
-	}
-
-	MuPDFMutex.Lock()
-	defer MuPDFMutex.Unlock()
-	err := d.document.Close()
-	d.document = nil
-	return err
+	d.source = nil
+	return nil
 }
 
 func (d *Document) LoadFromMemory(contents []byte) error {
-
-	MuPDFMutex.Lock()
-	doc, err := fitz.NewFromMemory(contents)
-	MuPDFMutex.Unlock()
+	src, err := OpenSource(contents)
 	if err != nil {
 		return errors.Wrap(err, "could not open pdf from memory")
 	}
-	return d.load(doc)
+	return d.load(src)
 }
 
+// renderer rendert außerhalb von d.mutex - Source serialisiert selbst.
 func (d *Document) renderer(pageNum int, size fyne.Size) (image.Image, error) {
-
 	d.mutex.Lock()
-	defer d.mutex.Unlock()
+	src := d.source
+	d.mutex.Unlock()
 
-	if d.document == nil {
+	if src == nil {
 		return nil, nil
 	}
 
-	MuPDFMutex.Lock()
-	defer MuPDFMutex.Unlock()
 	// TODO choose dpi for size
-	return d.document.ImageDPI(pageNum, 144)
+	return src.RenderPage(pageNum, 144)
 }
 
-func (d *Document) load(document *fitz.Document) error {
+func (d *Document) load(src *Source) error {
 
 	defer func() {
 		if len(d.thumbnails) > 0 {
@@ -235,16 +219,11 @@ func (d *Document) load(document *fitz.Document) error {
 		}
 	}()
 
-	MuPDFMutex.Lock()
-	// close previous document
-	if d.document != nil && d.document != document {
-		// TODO Log
-		_ = d.document.Close()
-	}
-	d.document = document
+	d.mutex.Lock()
+	d.source = src
+	d.mutex.Unlock()
 
-	numPage := document.NumPage() // cache
-	MuPDFMutex.Unlock()
+	numPage := src.PageCount()
 
 	eg := errgroup.Group{}
 	for pageNumber := 0; pageNumber < numPage; pageNumber++ {
@@ -256,16 +235,16 @@ func (d *Document) load(document *fitz.Document) error {
 				Height: 200,
 			}); err != nil {
 				return err
-			} else {
+			} else if img != nil {
 				newPage.SetImage(img)
 				newPage.SetTitle(strconv.Itoa(localPageNumber))
-				return nil
 			}
+			return nil
 		})
 		newPage.OnTapped = func() {
 			if img, err := d.renderer(localPageNumber, d.bigPage.Size()); err != nil {
 				spew.Dump(err)
-			} else {
+			} else if img != nil {
 				d.bigPage.SetImage(img)
 				d.ZoomToFit()
 			}
