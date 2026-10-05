@@ -1,0 +1,54 @@
+name: Bug report
+description: Something does not work or a PDF renders incorrectly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! For rendering bugs the PDF itself is the most useful
+        thing — please attach it (or a minimal file showing the same problem) if
+        you are allowed to share it.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead? Screenshots welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal code and/or steps. Attach the PDF here via drag & drop.
+      placeholder: |
+        1. Load attached file with `doc.LoadFromMemory(...)`
+        2. Zoom to 200 %
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output / logs
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: fyne-pdf version
+      description: Tag or commit, see your go.mod.
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: go
+    attributes:
+      label: Go and Fyne version
+      placeholder: go1.26.4, fyne v2.5.5
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      multiple: true
+      options: [Windows, macOS, Linux, Android, iOS, Web, Other]
+    validations:
+      required: true
