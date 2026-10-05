@@ -1,6 +1,7 @@
 # fyne-pdf
 
 [![CI](https://github.com/timzifer/fyne-pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/timzifer/fyne-pdf/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/timzifer/fyne-pdf/graph/badge.svg)](https://codecov.io/gh/timzifer/fyne-pdf)
 [![Go Reference](https://pkg.go.dev/badge/github.com/timzifer/fyne-pdf.svg)](https://pkg.go.dev/github.com/timzifer/fyne-pdf)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -12,8 +13,10 @@ no cgo PDF library, no external binaries.
 ## Features
 
 - `Document` widget: page view with thumbnail strip, zoom slider,
-  zoom in/out, 100 %, fit page / fit width / fit height
-- Optional save button via `SaveCallback`
+  zoom in/out, 100 % (physical size), fit page / fit width / fit height
+- Rendering in the background, the UI never waits for a page; the resolution
+  of the main view follows the zoom level and the screen scale
+- Optional save button via `SaveCallback`, render errors via `OnError`
 - `Source`: goroutine-safe access to an opened PDF — page count, page bounds,
   rendering at arbitrary DPI, document metadata
 - `NewImageFromMemory`: render a single page to an `image.Image` without any UI
@@ -26,8 +29,8 @@ no cgo PDF library, no external binaries.
 go get github.com/timzifer/fyne-pdf
 ```
 
-Requires Go 1.26+. Fyne itself needs a C compiler and the platform graphics
-headers — see the [Fyne prerequisites](https://docs.fyne.io/started/).
+Requires Go 1.26+ and Fyne 2.6+ (uses `fyne.Do`). Fyne itself needs a C
+compiler and the platform graphics headers — see the [Fyne prerequisites](https://docs.fyne.io/started/).
 
 ## Usage
 
@@ -59,6 +62,8 @@ func main() {
 		panic(err)
 	}
 
+	// doc.ShowPage(2) // jump to the third page
+
 	w.SetContent(doc)
 	w.Resize(fyne.NewSize(1024, 768))
 	w.ShowAndRun()
@@ -87,10 +92,8 @@ img, err := src.RenderPage(0, 300) // 300 dpi
 ## Status
 
 Usable, but young. The API may still change before v1.0.0.
-Known gaps:
-
-- Page rendering uses a fixed resolution (144 dpi) independent of zoom level.
-- No text selection, search, links or annotations.
+Not supported yet: text selection, search, links, annotations, scrolling
+through all pages continuously.
 
 ## Contributing
 

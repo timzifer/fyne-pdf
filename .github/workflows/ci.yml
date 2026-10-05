@@ -48,6 +48,14 @@ jobs:
         if: runner.os == 'Linux'
         run: go test -race -coverprofile=coverage.out ./...
 
+      - name: Upload coverage
+        if: runner.os == 'Linux'
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
