@@ -9,6 +9,7 @@ import (
 )
 
 type (
+	// Thumbnail is a tappable page preview with a title below it.
 	Thumbnail struct {
 		widget.BaseWidget
 
@@ -26,6 +27,7 @@ type (
 	}
 )
 
+// ThumbnailMinimumDimension is the default width and height of a thumbnail.
 const ThumbnailMinimumDimension = float32(100)
 
 func (t *thumbnailRenderer) Destroy() {
@@ -81,11 +83,13 @@ func (t *Thumbnail) Tapped(_ *fyne.PointEvent) {
 	}
 }
 
+// SetTitle sets the label shown below the preview.
 func (t *Thumbnail) SetTitle(title string) {
 	t.label.SetText(title)
 	t.Refresh()
 }
 
+// SetImage sets the preview image.
 func (t *Thumbnail) SetImage(theImage image.Image) {
 	t.page.SetImage(theImage)
 	t.page.Refresh()
@@ -97,6 +101,7 @@ func (t *Thumbnail) CreateRenderer() fyne.WidgetRenderer {
 	return &thumbnailRenderer{thumbnail: t}
 }
 
+// SetMinimumSize sets the size of the preview image area.
 func (t *Thumbnail) SetMinimumSize(size fyne.Size) {
 	t.minimumSize = size
 }
@@ -104,6 +109,7 @@ func (t *Thumbnail) SetMinimumSize(size fyne.Size) {
 var _ fyne.Widget = (*Thumbnail)(nil)
 var _ fyne.Tappable = (*Thumbnail)(nil)
 
+// NewThumbnail creates an empty Thumbnail.
 func NewThumbnail() *Thumbnail {
 	t := &Thumbnail{
 		label: widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),

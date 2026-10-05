@@ -20,6 +20,8 @@ import (
 )
 
 type (
+	// Document is a PDF viewer widget: a page view with a toolbar for zooming
+	// and a thumbnail strip for navigation. Create it with [NewDocument].
 	Document struct {
 		widget.BaseWidget
 
@@ -36,8 +38,11 @@ type (
 		zoom               binding.Float
 		scrollContainer    *container.Scroll
 
+		// BackgroundColor fills the area behind the page.
 		BackgroundColor color.Color
-		SaveCallback    func()
+		// SaveCallback, if set, shows a save button in the toolbar that calls
+		// it. Call Refresh after changing it.
+		SaveCallback func()
 
 		mutex                  sync.Mutex
 		toggleThumbnailsButton *widget.Button
@@ -57,6 +62,7 @@ var (
 	_ io.Closer   = (*Document)(nil)
 )
 
+// NewDocument creates an empty viewer. Load a PDF with [Document.LoadFromMemory].
 func NewDocument() *Document {
 	d := &Document{
 		thumbnailContainer: container.NewHBox(),
@@ -111,7 +117,7 @@ func NewDocument() *Document {
 
 	d.zoomInButton = widget.NewButton("", func() {
 		if current, err := d.zoom.Get(); err == nil {
-			d.zoom.Set(math.Min(zoomSlider.Max, current+0.25))
+			_ = d.zoom.Set(math.Min(zoomSlider.Max, current+0.25))
 		}
 	})
 	d.zoomInButton.Icon = fyne_lucide.Icon(fyne_lucide.IconZoomIn)
@@ -119,7 +125,7 @@ func NewDocument() *Document {
 
 	d.zoomOutButton = widget.NewButton("", func() {
 		if current, err := d.zoom.Get(); err == nil {
-			d.zoom.Set(math.Max(zoomSlider.Min, current-0.25))
+			_ = d.zoom.Set(math.Max(zoomSlider.Min, current-0.25))
 		}
 	})
 	d.zoomOutButton.Icon = fyne_lucide.Icon(fyne_lucide.IconZoomOut)
@@ -180,7 +186,7 @@ func NewDocument() *Document {
 	return d
 }
 
-// Close gibt das Dokument frei. Danach liefert renderer (nil, nil).
+// Close releases the loaded PDF. Pages already shown stay visible.
 func (d *Document) Close() error {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
@@ -189,6 +195,8 @@ func (d *Document) Close() error {
 	return nil
 }
 
+// LoadFromMemory opens the PDF in contents, renders the thumbnails and shows
+// the first page.
 func (d *Document) LoadFromMemory(contents []byte) error {
 	src, err := OpenSource(contents)
 	if err != nil {
@@ -281,10 +289,12 @@ func (d *Document) Refresh() {
 	d.base.Refresh()
 }
 
+// Zoom sets the zoom factor; 1 is 100 %. The slider allows 0.2 to 4.
 func (d *Document) Zoom(scale float64) {
 	_ = d.zoom.Set(scale)
 }
 
+// ZoomToFit scales the page so it fits completely into the view.
 func (d *Document) ZoomToFit() {
 
 	imageSize := d.bigPage.PageSize()
@@ -299,11 +309,13 @@ func (d *Document) ZoomToFit() {
 	}
 }
 
+// ZoomToFitVertical scales the page to the height of the view.
 func (d *Document) ZoomToFitVertical() {
 	imageSize := d.bigPage.PageSize()
 	_ = d.zoom.Set(float64(d.scrollContainer.Size().Height / imageSize.Height))
 }
 
+// ZoomToFitHorizontal scales the page to the width of the view.
 func (d *Document) ZoomToFitHorizontal() {
 	imageSize := d.bigPage.PageSize()
 	_ = d.zoom.Set(float64(d.scrollContainer.Size().Width / imageSize.Width))

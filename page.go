@@ -9,6 +9,7 @@ import (
 )
 
 type (
+	// Page displays a single rendered page image, scaled by Scale.
 	Page struct {
 		widget.BaseWidget
 
@@ -80,6 +81,7 @@ func (p *Page) CreateRenderer() fyne.WidgetRenderer {
 	}
 }
 
+// PageSize returns the size of the page image in pixels.
 func (p *Page) PageSize() fyne.Size {
 	imageSize := p.image.Image.Bounds().Max
 	return fyne.Size{
@@ -88,6 +90,7 @@ func (p *Page) PageSize() fyne.Size {
 	}
 }
 
+// SetImage replaces the displayed page image.
 func (p *Page) SetImage(pageImage image.Image) {
 	p.image.Image = pageImage
 	p.image.Refresh()
@@ -107,12 +110,14 @@ func (p *Page) SetImage(pageImage image.Image) {
 	}
 */
 
+// NewPageWithImage creates a Page showing img.
 func NewPageWithImage(img image.Image) *Page {
 	p := NewPage()
 	p.SetImage(img)
 	return p
 }
 
+// NewPage creates an empty Page.
 func NewPage() *Page {
 	p := &Page{
 		image: &canvas.Image{
