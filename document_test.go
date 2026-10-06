@@ -361,18 +361,69 @@ func TestDocumentFitBeforeShown(t *testing.T) {
 
 	// Not in a window yet: fitting has to wait for a size.
 	loadAndWait(t, d, multiPagePDF(1))
-	if !d.fitPending {
-		t.Fatal("fit should be pending without a size")
+	if !d.fitHorizontal || !d.fitVertical {
+		t.Fatal("fit mode should be set by ShowPage")
+	}
+	if z := zoomOf(t, d); z != 1 {
+		t.Fatalf("zoom = %v without a size, want 1", z)
 	}
 
 	w := test.NewTempWindow(t, d)
 	w.Resize(fyne.NewSize(800, 600))
 	settle(d)
-	if d.fitPending {
-		t.Fatal("fit should be applied after resize")
-	}
 	if z := zoomOf(t, d); z == 1 {
 		t.Error("zoom not fitted after resize")
+	}
+}
+
+// fittedZoom is the zoom that fits the current page into the view.
+func fittedZoom(d *Document) float64 {
+	view, page := d.scrollContainer.Size(), d.bigPage.PageSize()
+	return clampZoom(math.Min(float64(view.Width/page.Width), float64(view.Height/page.Height)))
+}
+
+func TestDocumentFitFollowsResize(t *testing.T) {
+	d := newDocument(t)
+	w := test.NewTempWindow(t, d)
+
+	// The first layout of a real window can be tiny; the fit must not stay
+	// at the zoom computed for it.
+	w.Resize(fyne.NewSize(400, 120))
+	loadAndWait(t, d, multiPagePDF(1))
+	small := zoomOf(t, d)
+
+	w.Resize(fyne.NewSize(800, 600))
+	settle(d)
+	z := zoomOf(t, d)
+	if z <= small || !approx(z, fittedZoom(d)) {
+		t.Fatalf("zoom after resize = %v (before %v), want fit %v", z, small, fittedZoom(d))
+	}
+
+	// The page is rendered for the size it is shown at.
+	img := d.bigPage.image
+	shown := img.Size()
+	if px := img.Image.Bounds().Dx(); math.Abs(float64(px)-float64(shown.Width)) > 2 {
+		t.Errorf("rendered width %d px, shown at %v", px, shown.Width)
+	}
+
+	// A zoom set by the user ends the fit.
+	d.Zoom(1.5)
+	settle(d)
+	w.Resize(fyne.NewSize(700, 500))
+	settle(d)
+	if z := zoomOf(t, d); z != 1.5 {
+		t.Errorf("zoom after resize = %v, want 1.5 set by the user", z)
+	}
+
+	// So does the slider, which changes the binding directly.
+	d.ZoomToFitHorizontal()
+	settle(d)
+	_ = d.zoom.Set(0.5)
+	settle(d)
+	w.Resize(fyne.NewSize(800, 600))
+	settle(d)
+	if z := zoomOf(t, d); z != 0.5 {
+		t.Errorf("zoom after resize = %v, want 0.5 set by the slider", z)
 	}
 }
 
@@ -445,9 +496,14 @@ func TestPage(t *testing.T) {
 	if len(r.Objects()) != 2 {
 		t.Fatalf("renderer objects = %d, want 2", len(r.Objects()))
 	}
+	// A larger widget centres the page at its zoomed size instead of
+	// stretching it beyond the resolution it was rendered for.
 	p.Resize(fyne.NewSize(300, 150))
-	if s := p.image.Size(); s != fyne.NewSize(300, 150) {
-		t.Errorf("image size = %v, want 300x150", s)
+	if s := p.image.Size(); s != fyne.NewSize(200, 100) {
+		t.Errorf("image size = %v, want 200x100", s)
+	}
+	if pos := p.image.Position(); pos != fyne.NewPos(50, 25) {
+		t.Errorf("image position = %v, want 50,25", pos)
 	}
 	r.Destroy()
 }
