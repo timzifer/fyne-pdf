@@ -14,6 +14,9 @@ no cgo PDF library, no external binaries.
 
 - `Document` widget: page view with thumbnail strip, zoom slider,
   zoom in/out, 100 % (physical size), fit page / fit width / fit height
+- Viewer gestures: Ctrl+wheel zoom around the pointer, page turns when
+  scrolling past a page's edge, drag to pan, double tap for fit/100 %;
+  keyboard: Page Up/Down, Space, Home/End, arrow keys, Ctrl +/-/0
 - Rendering in the background, the UI never waits for a page; the resolution
   of the main view follows the zoom level and the screen scale
 - Optional save button via `SaveCallback`, render errors via `OnError`

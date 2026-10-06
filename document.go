@@ -46,6 +46,14 @@ type (
 	// Document is a PDF viewer widget: a page view with a toolbar for zooming
 	// and a thumbnail strip for navigation. Create it with [NewDocument].
 	//
+	// The page view supports the usual viewer gestures: Ctrl+wheel (Cmd on
+	// macOS) zooms around the pointer, scrolling on past the top or bottom
+	// of a page turns it, dragging pans, a double tap switches between the
+	// fitted page and 100 %. Once clicked, it takes the keyboard focus:
+	// Page Up/Down and Space scroll by a screen, Home/End go to the first
+	// and last page, the arrow keys scroll (Left/Right turn pages while the
+	// page fits horizontally), Ctrl +/-/0 zoom.
+	//
 	// Pages are rendered in the background; the resolution of the main view
 	// follows the zoom level. Methods must be called from the Fyne main
 	// goroutine (or before the app runs).
@@ -63,6 +71,7 @@ type (
 
 		thumbnails []*Thumbnail
 		bigPage    *Page
+		area       *pageArea
 
 		base               *fyne.Container
 		thumbnailContainer *fyne.Container
@@ -82,6 +91,8 @@ type (
 		// fitScale is the zoom the last fit set.
 		fitHorizontal, fitVertical bool
 		fitScale                   float64
+		// modifiers returns the key modifiers held; replaced in tests.
+		modifiers func() fyne.KeyModifier
 		// runOnMain applies results of background renders; fyne.Do, replaced
 		// in tests.
 		runOnMain func(func())
@@ -117,13 +128,15 @@ func NewDocument() *Document {
 		toolbar:            container.NewHBox(),
 		zoom:               binding.NewFloat(),
 		runOnMain:          fyne.Do,
+		modifiers:          currentKeyModifiers,
 	}
 	_ = d.zoom.Set(1)
 
 	d.thumbnailScroller = container.NewHScroll(d.thumbnailContainer)
 
 	d.bigPage = NewPage()
-	d.scrollContainer = container.NewScroll(d.bigPage)
+	d.area = newPageArea(d)
+	d.scrollContainer = container.NewScroll(d.area)
 
 	d.zoomSlider = widget.NewSliderWithData(minZoom, maxZoom, d.zoom)
 	d.zoomSlider.Step = 0
@@ -225,12 +238,7 @@ func (d *Document) zoomChanged() {
 	if factor != d.fitScale {
 		d.fitHorizontal, d.fitVertical = false, false
 	}
-	if factor != d.bigPage.Scale {
-		d.bigPage.Scale = factor
-		d.bigPage.Refresh()
-		d.scrollContainer.Refresh()
-		d.scheduleRender(zoomRenderDelay)
-	}
+	d.applyScale(factor)
 
 	if factor <= minZoom {
 		d.zoomOutButton.Disable()
@@ -373,12 +381,42 @@ func (d *Document) load(src *Source) {
 	}
 }
 
+// applyScale shows the page at zoom. The zoom binding's listener calls it,
+// but only asynchronously; code that needs the new layout right away (a
+// fit, a page turn, zooming around a point) calls it directly.
+func (d *Document) applyScale(zoom float64) {
+	if zoom == d.bigPage.Scale {
+		return
+	}
+	d.bigPage.Scale = zoom
+	d.bigPage.Refresh()
+	d.layoutArea()
+	d.scrollContainer.Refresh()
+	d.scheduleRender(zoomRenderDelay)
+}
+
+// layoutArea sizes the scroll content for the current zoom without waiting
+// for the next layout pass, so scroll offsets can be set right away.
+func (d *Document) layoutArea() {
+	d.area.Resize(d.area.MinSize().Max(d.scrollContainer.Size()))
+}
+
 // ShowPage shows page (0-based) in the main view and zooms it to fit.
 func (d *Document) ShowPage(page int) {
+	if d.setPage(page) {
+		d.ZoomToFit()
+		d.scheduleRender(0)
+	}
+}
+
+// setPage makes page current and shows its thumbnail as a placeholder until
+// it is rendered. It reports false if page is out of range or already
+// current.
+func (d *Document) setPage(page int) bool {
 	d.mutex.Lock()
 	if page < 0 || page >= len(d.bounds) || page == d.current {
 		d.mutex.Unlock()
-		return
+		return false
 	}
 	d.current = page
 	d.renderedDPI = 0
@@ -389,13 +427,16 @@ func (d *Document) ShowPage(page int) {
 		thumbnail.SetSelected(i == page)
 	}
 
-	d.bigPage.SetImage(image.NewGray(image.Rectangle{}))
+	var placeholder image.Image = image.NewGray(image.Rectangle{})
+	if page < len(d.thumbnails) {
+		placeholder = d.thumbnails[page].page.image.Image
+	}
+	d.bigPage.SetImage(placeholder)
 	d.bigPage.SetPageSize(fyne.Size{
 		Width:  float32(float64(bound.Dx()) * unitsPerPoint),
 		Height: float32(float64(bound.Dy()) * unitsPerPoint),
 	})
-	d.ZoomToFit()
-	d.scheduleRender(0)
+	return true
 }
 
 // scheduleRender renders the current page for the main view after delay,
@@ -502,7 +543,12 @@ func (d *Document) Resize(size fyne.Size) {
 // The factor is clamped to 0.2 to 4.
 func (d *Document) Zoom(scale float64) {
 	d.fitHorizontal, d.fitVertical = false, false
-	_ = d.zoom.Set(clampZoom(scale))
+	d.setZoom(clampZoom(scale))
+}
+
+func (d *Document) setZoom(zoom float64) {
+	_ = d.zoom.Set(zoom)
+	d.applyScale(zoom)
 }
 
 func clampZoom(scale float64) float64 {
@@ -543,5 +589,5 @@ func (d *Document) fitZoom(horizontal, vertical bool) {
 		scale = math.Min(scale, float64(view.Height/page.Height))
 	}
 	d.fitScale = clampZoom(scale)
-	_ = d.zoom.Set(d.fitScale)
+	d.setZoom(d.fitScale)
 }
