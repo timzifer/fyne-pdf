@@ -218,7 +218,11 @@ func (d *Document) zoomModifier() bool {
 	return m&(fyne.KeyModifierShortcutDefault|fyne.KeyModifierControl) != 0
 }
 
-func currentKeyModifiers() fyne.KeyModifier {
+// driverKeyModifiers returns the modifiers the Fyne driver tracks. Its GLFW
+// driver treats every key action but a press as a release, so a modifier
+// that is held long enough to auto-repeat drops out (fyne v2.8.1); see
+// currentKeyModifiers.
+func driverKeyModifiers() fyne.KeyModifier {
 	if drv, ok := fyne.CurrentApp().Driver().(desktop.Driver); ok {
 		return drv.CurrentKeyModifiers()
 	}
