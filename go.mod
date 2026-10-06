@@ -6,8 +6,8 @@ toolchain go1.26.6
 
 require (
 	fyne.io/fyne/v2 v2.8.1
-	github.com/cockroachdb/errors v1.10.0
-	github.com/go-pdfkit/reader v0.6.0
+	github.com/cockroachdb/errors v1.14.0
+	github.com/go-pdfkit/reader v0.6.1
 	github.com/timzifer/cera v0.4.0
 	github.com/timzifer/fyne_lucide v1.2.0
 	github.com/timzifer/fyne_tabler v1.2.0
@@ -23,7 +23,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fyne-io/gl-js v0.2.1-0.20260315212741-029c47fd27e8 // indirect
 	github.com/fyne-io/oksvg v0.2.0 // indirect
-	github.com/getsentry/sentry-go v0.18.0 // indirect
+	github.com/getsentry/sentry-go v0.46.0 // indirect
 	github.com/go-gl/gl v0.0.0-20260331235117-4566fea9a276 // indirect
 	github.com/go-images/jpeg v0.2.0 // indirect
 	github.com/go-images/jpeg2000 v0.13.2 // indirect
