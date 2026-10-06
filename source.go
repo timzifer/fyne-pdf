@@ -26,8 +26,9 @@ var paper = color.RGBA{R: 255, G: 255, B: 255, A: 255}
 // allows interpreting pages of a document from one goroutine at a time, hence
 // the mutex. A single page is still rasterized by cera on all cores.
 type Source struct {
-	mu  sync.Mutex
-	doc *cera.Document
+	mu       sync.Mutex
+	doc      *cera.Document
+	contents []byte // for Metadata; cera does not expose its parser
 }
 
 // OpenSource parses the PDF in contents.
@@ -39,7 +40,7 @@ func OpenSource(contents []byte) (*Source, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open pdf")
 	}
-	return &Source{doc: doc}, nil
+	return &Source{doc: doc, contents: contents}, nil
 }
 
 // PageCount returns the number of pages, or 0 after Close.
@@ -111,6 +112,7 @@ func (s *Source) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.doc = nil
+	s.contents = nil
 	return nil
 }
 
@@ -141,20 +143,25 @@ func (s *Source) Metadata() map[string]string {
 	if s.doc == nil {
 		return out
 	}
-	info, ok := reader.ToDict(s.resolve(s.doc.Reader().Trailer().Get("Info")))
+	// cera keeps its parser internal, so the info dictionary is read with a
+	// parser of our own, only when metadata is asked for.
+	r, err := reader.Open(s.contents)
+	if err != nil {
+		return out
+	}
+	resolve := func(o reader.Object) reader.Object {
+		v, _ := r.Resolve(o)
+		return v
+	}
+	info, ok := reader.ToDict(resolve(r.Trailer().Get("Info")))
 	if !ok {
 		return out
 	}
 	for key, value := range info {
-		if str, ok := reader.ToString(s.resolve(value)); ok {
+		if str, ok := reader.ToString(resolve(value)); ok {
 			out[strings.ToLower(string(key))] = decodeTextString(str)
 		}
 	}
-	return out
-}
-
-func (s *Source) resolve(o reader.Object) reader.Object {
-	out, _ := s.doc.Reader().Resolve(o)
 	return out
 }
 

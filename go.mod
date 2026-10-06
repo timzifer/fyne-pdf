@@ -8,13 +8,14 @@ require (
 	fyne.io/fyne/v2 v2.8.1
 	github.com/cockroachdb/errors v1.10.0
 	github.com/go-pdfkit/reader v0.6.0
-	github.com/timzifer/cera v0.3.0
+	github.com/timzifer/cera v0.4.0
 	github.com/timzifer/fyne_lucide v1.2.0
 	github.com/timzifer/fyne_tabler v1.2.0
 )
 
 require (
 	github.com/ajroetker/go-highway v0.0.12 // indirect
+	github.com/andybalholm/brotli v1.2.6 // indirect
 	github.com/anthonynsimon/bild v0.14.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
@@ -28,7 +29,6 @@ require (
 	github.com/go-images/jpeg2000 v0.13.2 // indirect
 	github.com/go-opentype/fonts v0.10.0 // indirect
 	github.com/go-opentype/opentype v0.13.0 // indirect
-	github.com/go-pdfkit/pdffont v0.3.1 // indirect
 	github.com/go-text/render v0.2.1 // indirect
 	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -47,7 +47,7 @@ require (
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tannevaled/gobig2 v0.2.0 // indirect
 	github.com/timzifer/fyne_iconkit v0.1.0 // indirect
-	github.com/timzifer/stilus v0.7.1-0.20261004051204-eaa0881d5596 // indirect
+	github.com/timzifer/stilus v0.8.0 // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
