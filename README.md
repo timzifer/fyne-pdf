@@ -95,7 +95,7 @@ if err != nil {
 }
 defer src.Close()
 
-fmt.Println(src.PageCount(), src.Metadata()["title"])
+fmt.Println(src.PageCount(), src.Metadata().Title)
 img, err := src.RenderPage(0, 300) // 300 dpi
 ```
 

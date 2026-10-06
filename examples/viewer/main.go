@@ -74,7 +74,7 @@ func (v *viewer) load(contents []byte, name string) error {
 
 	title := name
 	if src, err := pdf.OpenSource(contents); err == nil {
-		if t := src.Metadata()["title"]; t != "" {
+		if t := src.Metadata().Title; t != "" {
 			title = t + " – " + name
 		}
 		_ = src.Close()

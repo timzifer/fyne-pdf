@@ -7,7 +7,6 @@ toolchain go1.26.6
 require (
 	fyne.io/fyne/v2 v2.8.1
 	github.com/cockroachdb/errors v1.14.0
-	github.com/go-pdfkit/reader v0.6.1
 	github.com/timzifer/cera v0.6.0
 	github.com/timzifer/fyne_lucide v1.2.0
 	github.com/timzifer/fyne_tabler v1.2.0
