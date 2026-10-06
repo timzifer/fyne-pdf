@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/layout"
@@ -35,6 +36,10 @@ const (
 
 	// zoomRenderDelay debounces re-rendering while the zoom changes.
 	zoomRenderDelay = 150 * time.Millisecond
+
+	// zoomSliderWidth is the minimum width of the zoom slider; in the
+	// toolbar's HBox it would otherwise shrink to the size of its thumb.
+	zoomSliderWidth = 150
 )
 
 type (
@@ -183,7 +188,9 @@ func NewDocument() *Document {
 	d.toolbar.Add(d.toggleThumbnailsButton)
 	d.toolbar.Add(layout.NewSpacer())
 	d.toolbar.Add(d.zoomOutButton)
-	d.toolbar.Add(d.zoomSlider)
+	sliderWidth := canvas.NewRectangle(color.Transparent)
+	sliderWidth.SetMinSize(fyne.NewSize(zoomSliderWidth, 0))
+	d.toolbar.Add(container.NewStack(sliderWidth, d.zoomSlider))
 	d.toolbar.Add(d.zoomInButton)
 	d.toolbar.Add(resetZoomButton)
 	d.toolbar.Add(fitButton)
