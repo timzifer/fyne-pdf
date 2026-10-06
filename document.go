@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/layout"
@@ -35,6 +36,10 @@ const (
 
 	// zoomRenderDelay debounces re-rendering while the zoom changes.
 	zoomRenderDelay = 150 * time.Millisecond
+
+	// zoomSliderWidth is the minimum width of the zoom slider; in the
+	// toolbar's HBox it would otherwise shrink to the size of its thumb.
+	zoomSliderWidth = 150
 )
 
 type (
@@ -72,8 +77,11 @@ type (
 		zoomOutButton          *widget.Button
 		saveButton             *widget.Button
 
-		// fitPending defers ZoomToFit until the widget has a size.
-		fitPending bool
+		// fitHorizontal and fitVertical keep the page fitted to the view
+		// while the view is resized, until the zoom is changed otherwise.
+		// fitScale is the zoom the last fit set.
+		fitHorizontal, fitVertical bool
+		fitScale                   float64
 		// runOnMain applies results of background renders; fyne.Do, replaced
 		// in tests.
 		runOnMain func(func())
@@ -183,7 +191,9 @@ func NewDocument() *Document {
 	d.toolbar.Add(d.toggleThumbnailsButton)
 	d.toolbar.Add(layout.NewSpacer())
 	d.toolbar.Add(d.zoomOutButton)
-	d.toolbar.Add(d.zoomSlider)
+	sliderWidth := canvas.NewRectangle(color.Transparent)
+	sliderWidth.SetMinSize(fyne.NewSize(zoomSliderWidth, 0))
+	d.toolbar.Add(container.NewStack(sliderWidth, d.zoomSlider))
 	d.toolbar.Add(d.zoomInButton)
 	d.toolbar.Add(resetZoomButton)
 	d.toolbar.Add(fitButton)
@@ -210,6 +220,11 @@ func NewDocument() *Document {
 
 func (d *Document) zoomChanged() {
 	factor, _ := d.zoom.Get()
+	// Listeners run asynchronously; Get returns the latest zoom, so a fit
+	// followed by another fit does not look like a change by the user.
+	if factor != d.fitScale {
+		d.fitHorizontal, d.fitVertical = false, false
+	}
 	if factor != d.bigPage.Scale {
 		d.bigPage.Scale = factor
 		d.bigPage.Refresh()
@@ -474,22 +489,29 @@ func (d *Document) Refresh() {
 	d.base.Refresh()
 }
 
-// Resize lays out the widget and applies a ZoomToFit that was requested
-// before the widget had a size.
+// Resize lays out the widget. While the page is fitted to the view (after
+// ShowPage or one of the ZoomToFit methods), the fit follows the new size.
 func (d *Document) Resize(size fyne.Size) {
 	d.BaseWidget.Resize(size)
-	if d.fitPending {
-		d.ZoomToFit()
+	if d.fitHorizontal || d.fitVertical {
+		d.fitZoom(d.fitHorizontal, d.fitVertical)
 	}
 }
 
 // Zoom sets the zoom factor; 1 shows the page at roughly its physical size.
 // The factor is clamped to 0.2 to 4.
 func (d *Document) Zoom(scale float64) {
-	_ = d.zoom.Set(math.Max(minZoom, math.Min(maxZoom, scale)))
+	d.fitHorizontal, d.fitVertical = false, false
+	_ = d.zoom.Set(clampZoom(scale))
 }
 
-// ZoomToFit scales the page so it fits completely into the view.
+func clampZoom(scale float64) float64 {
+	return math.Max(minZoom, math.Min(maxZoom, scale))
+}
+
+// ZoomToFit scales the page so it fits completely into the view. The fit
+// is kept when the view is resized, until the zoom is changed otherwise;
+// the same holds for ZoomToFitVertical and ZoomToFitHorizontal.
 func (d *Document) ZoomToFit() {
 	d.fitZoom(true, true)
 }
@@ -505,13 +527,13 @@ func (d *Document) ZoomToFitHorizontal() {
 }
 
 func (d *Document) fitZoom(horizontal, vertical bool) {
+	d.fitHorizontal, d.fitVertical = horizontal, vertical
 	view := d.scrollContainer.Size()
 	page := d.bigPage.PageSize()
 	if view.IsZero() || page.IsZero() {
-		d.fitPending = horizontal && vertical
+		// Applied by Resize once the view has a size.
 		return
 	}
-	d.fitPending = false
 
 	scale := math.Inf(1)
 	if horizontal {
@@ -520,5 +542,6 @@ func (d *Document) fitZoom(horizontal, vertical bool) {
 	if vertical {
 		scale = math.Min(scale, float64(view.Height/page.Height))
 	}
-	d.Zoom(scale)
+	d.fitScale = clampZoom(scale)
+	_ = d.zoom.Set(d.fitScale)
 }

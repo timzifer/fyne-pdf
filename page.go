@@ -10,9 +10,11 @@ import (
 )
 
 type (
-	// Page displays a single rendered page image. Its minimum size is
-	// [Page.PageSize] multiplied by Scale; the image is scaled to fit, so
-	// it can be rendered at any resolution. The aspect ratio is kept.
+	// Page displays a single rendered page image at [Page.PageSize]
+	// multiplied by Scale, which is also its minimum size. A larger widget
+	// centres the page on BackgroundColor. The image is scaled to the page
+	// size, so it can be rendered at any resolution; the aspect ratio is
+	// kept.
 	Page struct {
 		widget.BaseWidget
 
@@ -39,8 +41,15 @@ func (p *pageRenderer) Layout(size fyne.Size) {
 	p.background.Move(fyne.Position{})
 	p.background.Resize(size)
 
-	p.pageWidget.image.Move(fyne.Position{})
-	p.pageWidget.image.Resize(size)
+	// The page keeps its zoomed size: stretched to a larger widget (e.g. a
+	// scroll container wider than the page), it would be shown larger than
+	// the resolution it was rendered for.
+	page := p.MinSize()
+	p.pageWidget.image.Move(fyne.NewPos(
+		max(0, (size.Width-page.Width)/2),
+		max(0, (size.Height-page.Height)/2),
+	))
+	p.pageWidget.image.Resize(page)
 }
 
 func (p *pageRenderer) MinSize() fyne.Size {
