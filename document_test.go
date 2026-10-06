@@ -332,6 +332,16 @@ func TestDocumentToolbar(t *testing.T) {
 	settle(d)
 }
 
+func TestDocumentZoomSliderWidth(t *testing.T) {
+	d := newTestDocument(t)
+	loadAndWait(t, d, multiPagePDF(1))
+
+	// In the toolbar's HBox the slider used to shrink to its thumb.
+	if w := d.zoomSlider.Size().Width; w < zoomSliderWidth {
+		t.Errorf("zoom slider width = %v, want at least %v", w, zoomSliderWidth)
+	}
+}
+
 func TestDocumentSaveCallback(t *testing.T) {
 	d := newTestDocument(t)
 	if d.saveButton.Visible() {
