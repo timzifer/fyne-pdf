@@ -24,6 +24,9 @@ var modifierKeys = []struct {
 // currentKeyModifiers asks Windows which modifier keys are held. Windows
 // auto-repeats a held Ctrl after about half a second, and Fyne's driver then
 // forgets it (see driverKeyModifiers): Ctrl+wheel would zoom only briefly.
+//
+// Remove this once the fix in Fyne (https://github.com/fyne-io/fyne/pull/6572)
+// is released and required in go.mod.
 func currentKeyModifiers() fyne.KeyModifier {
 	if procGetAsyncKeyState.Find() != nil {
 		return driverKeyModifiers()
