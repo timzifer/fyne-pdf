@@ -70,6 +70,13 @@ func main() {
 }
 ```
 
+A complete viewer with an open dialog, save button and error reporting is in
+[examples/viewer](examples/viewer/main.go):
+
+```sh
+go run ./examples/viewer [file.pdf]
+```
+
 ### Render a page to an image
 
 ```go
