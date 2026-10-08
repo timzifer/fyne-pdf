@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"maps"
 	"sync"
 	"testing"
+	"time"
 )
 
 // minimalPDF baut ein einseitiges PDF (612x792 pt) mit einem roten Rechteck
@@ -138,19 +140,6 @@ func TestSourceBoundAndClose(t *testing.T) {
 	}
 }
 
-func TestDecodeTextString(t *testing.T) {
-	cases := map[string][]byte{
-		"Zeichnung": []byte("Zeichnung"),
-		"Größe":     {0xFE, 0xFF, 0, 'G', 0, 'r', 0, 0xF6, 0, 0xDF, 0, 'e'},
-		"Maß":       {'M', 'a', 0xDF},
-	}
-	for want, in := range cases {
-		if got := decodeTextString(in); got != want {
-			t.Errorf("decodeTextString(%v) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestSourceBoundRotatedCropped(t *testing.T) {
 	src, err := OpenSource(pagePDF("/CropBox [0 0 300 400] /Rotate 90"))
 	if err != nil {
@@ -178,7 +167,7 @@ func TestSourceMetadata(t *testing.T) {
 	var buf bytes.Buffer
 	buf.Write(pdf)
 	info := buf.Len()
-	fmt.Fprintf(&buf, "5 0 obj\n<< /Title (Plan) /Author <FEFF00470072006F00DF> >>\nendobj\n")
+	fmt.Fprintf(&buf, "5 0 obj\n<< /Title (Plan) /Author <FEFF00470072006F00DF> /CreationDate (D:20260102030405+01'00') /Department (Bau) >>\nendobj\n")
 	xref := buf.Len()
 	prev := bytes.LastIndex(pdf, []byte("startxref\n"))
 	var prevXref int
@@ -193,16 +182,18 @@ func TestSourceMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta := src.Metadata()
-	if meta["title"] != "Plan" || meta["author"] != "Groß" {
-		t.Fatalf("Metadata = %v, want title Plan, author Groß", meta)
+	created := time.Date(2026, 1, 2, 3, 4, 5, 0, time.FixedZone("", 3600))
+	if meta.Title != "Plan" || meta.Author != "Groß" || !meta.Created.Equal(created) ||
+		!meta.Modified.IsZero() || !maps.Equal(meta.Custom, map[string]string{"Department": "Bau"}) {
+		t.Fatalf("Metadata = %+v", meta)
 	}
 
-	if m := mustOpen(t, minimalPDF()).Metadata(); len(m) != 0 {
-		t.Errorf("Metadata without info = %v, want empty", m)
+	if m := mustOpen(t, minimalPDF()).Metadata(); m.Title != "" || len(m.Custom) != 0 {
+		t.Errorf("Metadata without info = %+v, want empty", m)
 	}
 	_ = src.Close()
-	if m := src.Metadata(); len(m) != 0 {
-		t.Errorf("Metadata after Close = %v, want empty", m)
+	if m := src.Metadata(); m.Title != "" || len(m.Custom) != 0 {
+		t.Errorf("Metadata after Close = %+v, want empty", m)
 	}
 }
 

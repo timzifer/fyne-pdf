@@ -6,13 +6,10 @@ import (
 	"image/color"
 	"log"
 	"math"
-	"strings"
 	"sync"
 	"time"
-	"unicode/utf16"
 
 	"github.com/cockroachdb/errors"
-	"github.com/go-pdfkit/reader"
 	"github.com/timzifer/cera"
 )
 
@@ -26,9 +23,8 @@ var paper = color.RGBA{R: 255, G: 255, B: 255, A: 255}
 // allows interpreting pages of a document from one goroutine at a time, hence
 // the mutex. A single page is still rasterized by cera on all cores.
 type Source struct {
-	mu       sync.Mutex
-	doc      *cera.Document
-	contents []byte // for Metadata; cera does not expose its parser
+	mu  sync.Mutex
+	doc *cera.Document
 }
 
 // OpenSource parses the PDF in contents.
@@ -40,7 +36,7 @@ func OpenSource(contents []byte) (*Source, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open pdf")
 	}
-	return &Source{doc: doc, contents: contents}, nil
+	return &Source{doc: doc}, nil
 }
 
 // PageCount returns the number of pages, or 0 after Close.
@@ -112,7 +108,6 @@ func (s *Source) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.doc = nil
-	s.contents = nil
 	return nil
 }
 
@@ -133,56 +128,47 @@ func (s *Source) Bound(page int) (image.Rectangle, error) {
 	return image.Rect(0, 0, int(math.Ceil(w)), int(math.Ceil(h))), nil
 }
 
-// Metadata returns the entries of the document info dictionary with lowercase
-// keys ("title", "author", ...).
-func (s *Source) Metadata() map[string]string {
+// Metadata is what a document says about itself: its document information
+// dictionary (/Info), decoded, and its XMP metadata stream.
+type Metadata struct {
+	Title, Author, Subject, Keywords, Creator, Producer string
+
+	// Created and Modified are zero when absent or not a date.
+	Created, Modified time.Time
+
+	// Trapped is "True", "False", "Unknown" or "".
+	Trapped string
+
+	// Custom holds the other string entries of /Info, by key as written
+	// in the document ("Department", ...).
+	Custom map[string]string
+
+	// XMP is the catalog's /Metadata stream, decoded but not parsed; nil if
+	// there is none.
+	XMP []byte
+}
+
+// Metadata returns the document's metadata, or the zero Metadata after
+// Close. A missing or damaged /Info gives empty fields.
+func (s *Source) Metadata() Metadata {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	out := map[string]string{}
 	if s.doc == nil {
-		return out
+		return Metadata{}
 	}
-	// cera keeps its parser internal, so the info dictionary is read with a
-	// parser of our own, only when metadata is asked for.
-	r, err := reader.Open(s.contents)
-	if err != nil {
-		return out
-	}
-	resolve := func(o reader.Object) reader.Object {
-		v, _ := r.Resolve(o)
-		return v
-	}
-	info, ok := reader.ToDict(resolve(r.Trailer().Get("Info")))
-	if !ok {
-		return out
-	}
-	for key, value := range info {
-		if str, ok := reader.ToString(resolve(value)); ok {
-			out[strings.ToLower(string(key))] = decodeTextString(str)
-		}
-	}
-	return out
-}
-
-// decodeTextString dekodiert einen PDF-Textstring: UTF-16BE bzw. UTF-8 mit
-// BOM, sonst PDFDocEncoding (hier vereinfacht als Latin-1).
-func decodeTextString(b []byte) string {
-	switch {
-	case len(b) >= 2 && b[0] == 0xFE && b[1] == 0xFF:
-		b = b[2:]
-		u := make([]uint16, 0, len(b)/2)
-		for i := 0; i+1 < len(b); i += 2 {
-			u = append(u, uint16(b[i])<<8|uint16(b[i+1]))
-		}
-		return string(utf16.Decode(u))
-	case len(b) >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF:
-		return string(b[3:])
-	default:
-		r := make([]rune, len(b))
-		for i, c := range b {
-			r[i] = rune(c)
-		}
-		return string(r)
+	m := s.doc.Metadata()
+	return Metadata{
+		Title:    m.Title,
+		Author:   m.Author,
+		Subject:  m.Subject,
+		Keywords: m.Keywords,
+		Creator:  m.Creator,
+		Producer: m.Producer,
+		Created:  m.Created,
+		Modified: m.Modified,
+		Trapped:  m.Trapped,
+		Custom:   m.Custom,
+		XMP:      m.XMP,
 	}
 }

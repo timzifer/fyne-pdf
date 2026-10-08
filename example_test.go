@@ -20,7 +20,7 @@ func ExampleOpenSource() {
 	defer func() { _ = src.Close() }()
 
 	fmt.Println("pages:", src.PageCount())
-	fmt.Println("title:", src.Metadata()["title"])
+	fmt.Println("title:", src.Metadata().Title)
 
 	img, err := src.RenderPage(0, 300)
 	if err != nil {
