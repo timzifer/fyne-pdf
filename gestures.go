@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 )
@@ -34,9 +35,10 @@ const (
 	pageScrollOverlap = 0.1
 )
 
-// pageArea is the content of the main scroll view. It shows the page and
-// handles the viewer gestures: Ctrl+wheel zoom, page turns at the edges,
-// dragging to pan, double tap, and keyboard navigation once focused.
+// pageArea is the content of the main scroll view. It shows the pages and
+// handles the viewer gestures: Ctrl+wheel zoom, page turns at the edges
+// (showing one page), dragging to pan, double tap, and keyboard navigation
+// once focused.
 type pageArea struct {
 	widget.BaseWidget
 
@@ -67,21 +69,32 @@ func newPageArea(d *Document) *pageArea {
 }
 
 func (a *pageArea) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(a.doc.bigPage)
+	r := &pageAreaRenderer{area: a, background: canvas.NewRectangle(a.doc.BackgroundColor)}
+	r.Refresh()
+	return r
 }
 
-// Scrolled zooms with Ctrl (Cmd on macOS) held, otherwise scrolls the view
-// and turns the page when scrolling on past its top or bottom.
+// MinSize is the size the pages need.
+func (a *pageArea) MinSize() fyne.Size {
+	return a.doc.layout.size
+}
+
+// Scrolled zooms with Ctrl (Cmd on macOS) held, otherwise scrolls the view.
+// Showing one page, it turns the page when scrolling on past its top or
+// bottom.
 func (a *pageArea) Scrolled(ev *fyne.ScrollEvent) {
 	d := a.doc
 	if d.zoomModifier() {
 		factor := math.Pow(zoomWheelFactor, float64(ev.Scrolled.DY)/wheelNotch)
-		d.zoomAt(d.bigPage.Scale*factor, ev.Position.Subtract(d.scrollContainer.Offset))
+		d.zoomAt(d.scale*factor, ev.Position.Subtract(d.scrollContainer.Offset))
 		return
 	}
 
 	before := d.scrollContainer.Offset
 	d.scrollContainer.Scrolled(ev)
+	if d.viewMode == ViewContinuous {
+		return
+	}
 
 	now := time.Now()
 	if now.Sub(a.lastScroll) > scrollGestureGap {
@@ -154,8 +167,9 @@ func (a *pageArea) FocusLost() {}
 func (a *pageArea) TypedRune(rune) {}
 
 // TypedKey navigates: Page Up/Down and Space (Shift+Space) scroll by a
-// screen and then turn the page, Home/End go to the first/last page, the
-// arrow keys scroll; Left/Right turn the page when it fits horizontally.
+// screen (and then turn the page, showing one page), Home/End go to the
+// first/last page, the arrow keys scroll; Left/Right go to the previous or
+// next page when the pages fit horizontally.
 func (a *pageArea) TypedKey(ev *fyne.KeyEvent) {
 	d := a.doc
 	switch ev.Name {
@@ -203,9 +217,9 @@ func (a *pageArea) TypedShortcut(s fyne.Shortcut) {
 	anchor := fyne.NewPos(center.Width/2, center.Height/2)
 	switch cs.KeyName {
 	case fyne.KeyPlus, fyne.KeyEqual:
-		d.zoomAt(d.bigPage.Scale*zoomKeyFactor, anchor)
+		d.zoomAt(d.scale*zoomKeyFactor, anchor)
 	case fyne.KeyMinus:
-		d.zoomAt(d.bigPage.Scale/zoomKeyFactor, anchor)
+		d.zoomAt(d.scale/zoomKeyFactor, anchor)
 	case fyne.Key0:
 		d.zoomAt(1, anchor)
 	}
@@ -233,49 +247,22 @@ func driverKeyModifiers() fyne.KeyModifier {
 // coordinates) in place.
 func (d *Document) zoomAt(zoom float64, anchor fyne.Position) {
 	zoom = clampZoom(zoom)
-	old := d.bigPage.Scale
-	if zoom == old {
+	if zoom == d.scale {
 		return
 	}
-	view := d.scrollContainer.Size()
-	page := d.bigPage.PageSize()
-
-	// Page point under the anchor, at zoom 1.
-	oldOrigin := pageOrigin(view, page, old)
-	point := d.scrollContainer.Offset.Add(anchor).Subtract(oldOrigin)
-	point = fyne.NewPos(point.X/float32(old), point.Y/float32(old))
-
-	d.Zoom(zoom)
-
-	newOrigin := pageOrigin(view, page, zoom)
-	target := newOrigin.Add(fyne.NewPos(point.X*float32(zoom), point.Y*float32(zoom)))
-	d.scrollTo(target.Subtract(anchor))
+	d.fitHorizontal, d.fitVertical = false, false
+	// The binding's listener finds the zoom applied already.
+	d.applyScaleAt(zoom, anchor)
+	_ = d.zoom.Set(zoom)
 }
 
-// pageOrigin is the position of the page within the scroll content: the
-// page is centred while it is smaller than the view.
-func pageOrigin(view, page fyne.Size, zoom float64) fyne.Position {
-	w, h := page.Width*float32(zoom), page.Height*float32(zoom)
-	return fyne.NewPos(max(0, (view.Width-w)/2), max(0, (view.Height-h)/2))
-}
-
-// scrollTo moves the view to offset, clamped to the content.
-func (d *Document) scrollTo(offset fyne.Position) {
-	view := d.scrollContainer.Size()
-	content := d.area.MinSize().Max(view)
-	d.scrollContainer.ScrollToOffset(fyne.NewPos(
-		min(max(0, offset.X), content.Width-view.Width),
-		min(max(0, offset.Y), content.Height-view.Height),
-	))
-}
-
-// scrollScreen scrolls by one screen down (dir 1) or up (dir -1), turning
-// the page when its bottom or top is already visible.
+// scrollScreen scrolls by one screen down (dir 1) or up (dir -1). Showing
+// one page, it turns the page when its bottom or top is already visible.
 func (d *Document) scrollScreen(dir float32) {
 	before := d.scrollContainer.Offset
 	step := d.scrollContainer.Size().Height * (1 - pageScrollOverlap)
 	d.scrollTo(before.AddXY(0, dir*step))
-	if d.scrollContainer.Offset != before {
+	if d.scrollContainer.Offset != before || d.viewMode == ViewContinuous {
 		return
 	}
 	if dir > 0 {
@@ -286,25 +273,22 @@ func (d *Document) scrollScreen(dir float32) {
 }
 
 func (d *Document) fitsHorizontally() bool {
-	return d.area.MinSize().Width <= d.scrollContainer.Size().Width
+	return d.layout.size.Width <= d.scrollContainer.Size().Width
 }
 
-// turnPage shows page keeping the zoom (or the fit, if one is active) and
-// scrolls to its top or bottom. It reports whether the page changed.
+// turnPage makes page current and scrolls to its top or bottom, keeping
+// the zoom (or the fit, if one is active). It reports whether it went to
+// page: it does not if page is out of range, or already shown alone.
 func (d *Document) turnPage(page int, atBottom bool) bool {
-	if !d.setPage(page) {
+	if page < 0 || page >= d.PageCount() {
 		return false
 	}
-	if d.fitHorizontal || d.fitVertical {
-		d.fitZoom(d.fitHorizontal, d.fitVertical)
+	if d.viewMode == ViewSinglePage && page == d.CurrentPage() {
+		return false
 	}
-	d.layoutArea()
-	d.scheduleRender(0)
-
-	offset := fyne.NewPos(d.scrollContainer.Offset.X, 0)
-	if atBottom {
-		offset.Y = d.area.MinSize().Height
-	}
-	d.scrollTo(offset)
+	d.setCurrent(page)
+	d.relayout()
+	d.applyFit()
+	d.scrollToPage(page, atBottom)
 	return true
 }

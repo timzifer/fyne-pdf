@@ -22,21 +22,27 @@ func wheel(dy float32, pos fyne.Position) *fyne.ScrollEvent {
 
 // pagePointAt returns the page point (at zoom 1) shown at pos in the view.
 func pagePointAt(d *Document, pos fyne.Position) fyne.Position {
-	zoom := float32(d.bigPage.Scale)
-	origin := pageOrigin(d.scrollContainer.Size(), d.bigPage.PageSize(), d.bigPage.Scale)
+	zoom := float32(d.scale)
+	origin := d.layout.origin(d.CurrentPage(), d.areaSize())
 	p := d.scrollContainer.Offset.Add(pos).Subtract(origin)
 	return fyne.NewPos(p.X/zoom, p.Y/zoom)
 }
 
-// newGestureDocument shows three pages at zoom 1, where a page is taller
-// than the 800x600 window.
+// newGestureDocument shows the top of three pages at zoom 1, where a page
+// is taller than the 800x600 window.
 func newGestureDocument(t *testing.T) *Document {
 	t.Helper()
 	d := newTestDocument(t)
 	loadAndWait(t, d, multiPagePDF(3))
-	d.Zoom(1)
-	settle(d)
+	zoomTop(d, 1)
 	return d
+}
+
+// zoomTop zooms and scrolls to the top left.
+func zoomTop(d *Document, zoom float64) {
+	d.Zoom(zoom)
+	d.scrollTo(fyne.Position{})
+	settle(d)
 }
 
 // newGesture starts a new scroll gesture, as after a pause.
@@ -154,8 +160,7 @@ func TestGestureScrollTurnsFittedPage(t *testing.T) {
 
 func TestGestureDragPans(t *testing.T) {
 	d := newGestureDocument(t)
-	d.Zoom(2)
-	settle(d)
+	zoomTop(d, 2)
 
 	d.area.Dragged(&fyne.DragEvent{Dragged: fyne.NewDelta(-30, -40)})
 	if o := d.scrollContainer.Offset; o != fyne.NewPos(30, 40) {
@@ -237,8 +242,7 @@ func TestGestureKeys(t *testing.T) {
 		t.Errorf("page after Left = %d, want 0", p)
 	}
 	// ... and scroll otherwise.
-	d.Zoom(2)
-	settle(d)
+	zoomTop(d, 2)
 	key(fyne.KeyRight)
 	if p, x := d.CurrentPage(), d.scrollContainer.Offset.X; p != 0 || x != arrowScrollStep {
 		t.Errorf("after Right at zoom 2: page %d, offset %v, want page 0, offset %v", p, x, arrowScrollStep)
