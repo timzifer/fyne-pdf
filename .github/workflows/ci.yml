@@ -38,8 +38,16 @@ jobs:
         run: |
           go mod tidy
           git diff --exit-code -- go.mod go.sum
+          cd examples/viewer
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
 
       - name: Vet
+        run: go vet ./...
+
+      # The viewer example is a module of its own (it pulls in goprint).
+      - name: Vet example
+        working-directory: examples/viewer
         run: go vet ./...
 
       - name: Test
@@ -108,3 +116,9 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.14
+
+      - name: Lint example
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14
+          working-directory: examples/viewer

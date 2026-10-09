@@ -81,12 +81,22 @@ func main() {
 }
 ```
 
-A complete viewer with an open dialog, save button and error reporting is in
-[examples/viewer](examples/viewer/main.go):
+A complete viewer with an open dialog, save button, printing and error
+reporting is in [examples/viewer](examples/viewer/main.go):
 
 ```sh
-go run ./examples/viewer [file.pdf]
+cd examples/viewer
+go run . [-print-dialog native|fyne] [file.pdf]
 ```
+
+The example is a module of its own that builds against the library in this
+repository (`replace` in its `go.mod`), so the printing packages stay out of
+the library's dependencies.
+
+File > Print (Ctrl+P) prints through [goprint](https://github.com/timzifer/goprint):
+`-print-dialog native` (the default) shows the platform's print dialog,
+`-print-dialog fyne` the dialog `fyneprint` draws with Fyne, with a preview
+and a "Save as PDF" button.
 
 ### Render a page to an image
 
