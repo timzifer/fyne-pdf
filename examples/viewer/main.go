@@ -1,11 +1,16 @@
 // Command viewer is a minimal PDF viewer built on fyne-pdf.
 //
-//	go run ./examples/viewer [file.pdf]
+//	go run ./examples/viewer [-print-dialog native|fyne] [file.pdf]
 //
-// Without an argument it starts empty; open a PDF with File > Open (Ctrl+O).
+// Without a file it starts empty; open a PDF with File > Open (Ctrl+O).
+// File > Print (Ctrl+P) prints it through goprint: -print-dialog native
+// (the default) shows the platform's print dialog, -print-dialog fyne the
+// one fyneprint draws with Fyne, with a preview and a "Save as PDF" button.
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -18,6 +23,8 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/storage"
 	pdf "github.com/timzifer/fyne-pdf"
+	"github.com/timzifer/goprint"
+	"github.com/timzifer/goprint/fyneprint"
 )
 
 type viewer struct {
@@ -25,13 +32,28 @@ type viewer struct {
 	doc      *pdf.Document
 	contents []byte
 	name     string
+	// title names the print job: the document's title or the file name.
+	title string
+	// fynePrintDialog selects fyneprint's dialog over the platform's.
+	fynePrintDialog bool
 }
 
 func main() {
+	printDialog := flag.String("print-dialog", "native", `print dialog: "native" (the platform's) or "fyne" (drawn by fyneprint)`)
+	flag.Usage = func() {
+		_, _ = fmt.Fprintln(flag.CommandLine.Output(), "usage: viewer [-print-dialog native|fyne] [file.pdf]")
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+	if (*printDialog != "native" && *printDialog != "fyne") || flag.NArg() > 1 {
+		flag.Usage()
+		os.Exit(2)
+	}
+
 	a := app.NewWithID("io.github.timzifer.fyne-pdf.viewer")
 	w := a.NewWindow("PDF Viewer")
 
-	v := &viewer{window: w, doc: pdf.NewDocument()}
+	v := &viewer{window: w, doc: pdf.NewDocument(), fynePrintDialog: *printDialog == "fyne"}
 	defer func() { _ = v.doc.Close() }()
 	// All pages one below the other; the toolbar switches to single pages.
 	v.doc.SetViewMode(pdf.ViewContinuous)
@@ -45,14 +67,17 @@ func main() {
 	openItem := fyne.NewMenuItem("Open…", v.showOpenDialog)
 	openItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyO, Modifier: fyne.KeyModifierShortcutDefault}
 	w.Canvas().AddShortcut(openItem.Shortcut, func(fyne.Shortcut) { v.showOpenDialog() })
-	w.SetMainMenu(fyne.NewMainMenu(fyne.NewMenu("File", openItem)))
+	printItem := fyne.NewMenuItem("Print…", v.showPrintDialog)
+	printItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyP, Modifier: fyne.KeyModifierShortcutDefault}
+	w.Canvas().AddShortcut(printItem.Shortcut, func(fyne.Shortcut) { v.showPrintDialog() })
+	w.SetMainMenu(fyne.NewMainMenu(fyne.NewMenu("File", openItem, printItem)))
 
-	if len(os.Args) > 1 {
-		contents, err := os.ReadFile(os.Args[1])
+	if path := flag.Arg(0); path != "" {
+		contents, err := os.ReadFile(path)
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := v.load(contents, filepath.Base(os.Args[1])); err != nil {
+		if err := v.load(contents, filepath.Base(path)); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -75,14 +100,38 @@ func (v *viewer) load(contents []byte, name string) error {
 	v.doc.Refresh()
 
 	title := name
+	v.title = name
 	if src, err := pdf.OpenSource(contents); err == nil {
 		if t := src.Metadata().Title; t != "" {
 			title = t + " – " + name
+			v.title = t
 		}
 		_ = src.Close()
 	}
 	v.window.SetTitle(fmt.Sprintf("%s (%d pages)", title, v.doc.PageCount()))
 	return nil
+}
+
+// showPrintDialog prints the open PDF after the user confirmed the print
+// dialog: the platform's or, with -print-dialog fyne, fyneprint's.
+func (v *viewer) showPrintDialog() {
+	if v.contents == nil {
+		dialog.ShowInformation("Print", "Open a PDF first.", v.window)
+		return
+	}
+	doc := goprint.PDFBytes(v.title, v.contents)
+	// Both dialogs report back on the UI goroutine. Cancelling, and saving
+	// as PDF in fyneprint's dialog, count as goprint.ErrCanceled.
+	done := func(_ *goprint.Job, _ goprint.Settings, err error) {
+		if err != nil && !errors.Is(err, goprint.ErrCanceled) {
+			dialog.ShowError(err, v.window)
+		}
+	}
+	if v.fynePrintDialog {
+		fyneprint.ShowPrintDialog(v.window, doc, fyneprint.PrintDialogOptions{PrintNow: true}, done)
+		return
+	}
+	fyneprint.ShowDialog(v.window, doc, goprint.DialogOptions{PrintNow: true}, done)
 }
 
 func (v *viewer) showOpenDialog() {
