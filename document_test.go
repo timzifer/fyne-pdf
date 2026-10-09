@@ -17,18 +17,28 @@ import (
 // multiPagePDF builds a PDF with n pages of 612x792 pt, each with a red
 // rectangle.
 func multiPagePDF(n int) []byte {
+	sizes := make([][2]int, n)
+	for i := range sizes {
+		sizes[i] = [2]int{612, 792}
+	}
+	return sizedPagesPDF(sizes...)
+}
+
+// sizedPagesPDF builds a PDF with a page of each width and height (in pt),
+// each with a red rectangle.
+func sizedPagesPDF(sizes ...[2]int) []byte {
 	content := "1 0 0 rg 100 100 200 200 re f"
-	kids := make([]string, n)
-	for i := range n {
+	kids := make([]string, len(sizes))
+	for i := range sizes {
 		kids[i] = fmt.Sprintf("%d 0 R", 4+i)
 	}
 	objects := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
-		fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", strings.Join(kids, " "), n),
+		fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", strings.Join(kids, " "), len(sizes)),
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 	}
-	for range n {
-		objects = append(objects, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 3 0 R >>")
+	for _, size := range sizes {
+		objects = append(objects, fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] /Contents 3 0 R >>", size[0], size[1]))
 	}
 
 	var buf bytes.Buffer
@@ -126,6 +136,11 @@ func approx(a, b float64) bool {
 	return math.Abs(a-b) < 1e-3
 }
 
+// currentView returns the object showing the current page.
+func currentView(d *Document) *Page {
+	return d.views[d.CurrentPage()]
+}
+
 func imageWidth(p *Page) int {
 	return p.image.Image.Bounds().Dx()
 }
@@ -160,12 +175,12 @@ func TestDocumentLoad(t *testing.T) {
 
 	// The page is fitted into the view and rendered for the resulting zoom.
 	view := d.scrollContainer.Size()
-	page := d.bigPage.PageSize()
+	page := d.pageSizes[d.CurrentPage()]
 	want := math.Min(float64(view.Width/page.Width), float64(view.Height/page.Height))
 	if z := zoomOf(t, d); !approx(z, want) {
 		t.Errorf("zoom = %v, want %v (fit)", z, want)
 	}
-	if w, want := imageWidth(d.bigPage), int(math.Ceil(612*96*want/72)); w < want-1 || w > want+1 {
+	if w, want := imageWidth(currentView(d)), int(math.Ceil(612*96*want/72)); w < want-1 || w > want+1 {
 		t.Errorf("page image width = %d, want %d", w, want)
 	}
 }
@@ -211,7 +226,7 @@ func TestDocumentShowPage(t *testing.T) {
 	if !d.thumbnails[2].Selected() || d.thumbnails[0].Selected() {
 		t.Error("selection did not follow the shown page")
 	}
-	if imageWidth(d.bigPage) == 0 {
+	if imageWidth(currentView(d)) == 0 {
 		t.Error("page 2 not rendered")
 	}
 
@@ -229,21 +244,21 @@ func TestDocumentZoom(t *testing.T) {
 
 	d.Zoom(2)
 	settle(d)
-	if d.bigPage.Scale != 2 {
-		t.Fatalf("page scale = %v, want 2", d.bigPage.Scale)
+	if d.scale != 2 {
+		t.Fatalf("page scale = %v, want 2", d.scale)
 	}
-	if min := d.bigPage.MinSize(); !approx(float64(min.Width), 612*96.0/72*2) {
+	if min := currentView(d).MinSize(); !approx(float64(min.Width), 612*96.0/72*2) {
 		t.Errorf("page min width = %v, want %v", min.Width, 612*96.0/72*2)
 	}
 	// 192 dpi
-	if w := imageWidth(d.bigPage); w != 1632 {
+	if w := imageWidth(currentView(d)); w != 1632 {
 		t.Errorf("page image width = %d, want 1632", w)
 	}
 
 	// Zooming out a little keeps the sharper image.
 	d.Zoom(1.8)
 	settle(d)
-	if w := imageWidth(d.bigPage); w != 1632 {
+	if w := imageWidth(currentView(d)); w != 1632 {
 		t.Errorf("page image width = %d, want 1632 (not re-rendered)", w)
 	}
 
@@ -270,7 +285,7 @@ func TestDocumentRenderSizeCapped(t *testing.T) {
 
 	d.Zoom(maxZoom)
 	settle(d)
-	b := d.bigPage.image.Image.Bounds()
+	b := currentView(d).image.Image.Bounds()
 	if px := b.Dx() * b.Dy(); px > maxRenderPixels*1.01 {
 		t.Errorf("rendered %d pixels, want at most %d", px, maxRenderPixels)
 	}
@@ -281,7 +296,7 @@ func TestDocumentToolbar(t *testing.T) {
 	loadAndWait(t, d, multiPagePDF(2))
 
 	view := d.scrollContainer.Size()
-	page := d.bigPage.PageSize()
+	page := d.pageSizes[d.CurrentPage()]
 
 	d.Zoom(1)
 	test.Tap(d.zoomInButton)
@@ -388,7 +403,7 @@ func TestDocumentFitBeforeShown(t *testing.T) {
 
 // fittedZoom is the zoom that fits the current page into the view.
 func fittedZoom(d *Document) float64 {
-	view, page := d.scrollContainer.Size(), d.bigPage.PageSize()
+	view, page := d.scrollContainer.Size(), d.pageSizes[d.CurrentPage()]
 	return clampZoom(math.Min(float64(view.Width/page.Width), float64(view.Height/page.Height)))
 }
 
@@ -410,7 +425,7 @@ func TestDocumentFitFollowsResize(t *testing.T) {
 	}
 
 	// The page is rendered for the size it is shown at.
-	img := d.bigPage.image
+	img := currentView(d).image
 	shown := img.Size()
 	if px := img.Image.Bounds().Dx(); math.Abs(float64(px)-float64(shown.Width)) > 2 {
 		t.Errorf("rendered width %d px, shown at %v", px, shown.Width)

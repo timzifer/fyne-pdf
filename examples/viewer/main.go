@@ -33,6 +33,8 @@ func main() {
 
 	v := &viewer{window: w, doc: pdf.NewDocument()}
 	defer func() { _ = v.doc.Close() }()
+	// All pages one below the other; the toolbar switches to single pages.
+	v.doc.SetViewMode(pdf.ViewContinuous)
 
 	// Render errors arrive on the main goroutine; a broken page should not
 	// end the program.

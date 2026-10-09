@@ -14,11 +14,18 @@ no cgo PDF library, no external binaries.
 
 - `Document` widget: page view with thumbnail strip, zoom slider,
   zoom in/out, 100 % (physical size), fit page / fit width / fit height
+- Two view modes: one page at a time, or all pages one below the other,
+  scrolled through without a break (`SetViewMode(pdf.ViewContinuous)` or the
+  toolbar button). Only the pages in view get objects and renders, so
+  documents with hundreds of pages scroll smoothly
 - Viewer gestures: Ctrl+wheel zoom around the pointer, page turns when
-  scrolling past a page's edge, drag to pan, double tap for fit/100 %;
-  keyboard: Page Up/Down, Space, Home/End, arrow keys, Ctrl +/-/0
-- Rendering in the background, the UI never waits for a page; the resolution
-  of the main view follows the zoom level and the screen scale
+  scrolling past a page's edge (single page mode), drag to pan, double tap
+  for fit/100 %; keyboard: Page Up/Down, Space, Home/End, arrow keys,
+  Ctrl +/-/0
+- Rendering in the background, the UI never waits for a page; pages in view
+  first, then their neighbours; the resolution of the main view follows the
+  zoom level and the screen scale, the page images kept share a memory
+  budget
 - Optional save button via `SaveCallback`, render errors via `OnError`
 - `Source`: goroutine-safe access to an opened PDF — page count, page bounds,
   rendering at arbitrary DPI, document metadata
@@ -65,7 +72,8 @@ func main() {
 		panic(err)
 	}
 
-	// doc.ShowPage(2) // jump to the third page
+	// doc.SetViewMode(pdf.ViewContinuous) // all pages one below the other
+	// doc.ShowPage(2)                     // jump to the third page
 
 	w.SetContent(doc)
 	w.Resize(fyne.NewSize(1024, 768))
@@ -102,8 +110,7 @@ img, err := src.RenderPage(0, 300) // 300 dpi
 ## Status
 
 Usable, but young. The API may still change before v1.0.0.
-Not supported yet: text selection, search, links, annotations, scrolling
-through all pages continuously.
+Not supported yet: text selection, search, links, annotations.
 
 ## Contributing
 

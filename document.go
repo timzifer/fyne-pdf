@@ -30,10 +30,6 @@ const (
 	minZoom = 0.2
 	maxZoom = 4
 
-	// maxRenderPixels caps the size of the page image rendered for the main
-	// view (~100 MB RGBA). Beyond that the image is scaled up for display.
-	maxRenderPixels = 25_000_000
-
 	// zoomRenderDelay debounces re-rendering while the zoom changes.
 	zoomRenderDelay = 150 * time.Millisecond
 
@@ -42,25 +38,40 @@ const (
 	zoomSliderWidth = 150
 )
 
+// ViewMode selects how the main view of a [Document] shows the pages.
+type ViewMode int
+
+const (
+	// ViewSinglePage shows one page at a time; scrolling past its top or
+	// bottom turns to the previous or next one.
+	ViewSinglePage ViewMode = iota
+	// ViewContinuous shows all pages one below the other, scrolled through
+	// without a break.
+	ViewContinuous
+)
+
 type (
 	// Document is a PDF viewer widget: a page view with a toolbar for zooming
 	// and a thumbnail strip for navigation. Create it with [NewDocument].
 	//
-	// The page view supports the usual viewer gestures: Ctrl+wheel (Cmd on
-	// macOS) zooms around the pointer, scrolling on past the top or bottom
-	// of a page turns it, dragging pans, a double tap switches between the
-	// fitted page and 100 %. Once clicked, it takes the keyboard focus:
-	// Page Up/Down and Space scroll by a screen, Home/End go to the first
-	// and last page, the arrow keys scroll (Left/Right turn pages while the
-	// page fits horizontally), Ctrl +/-/0 zoom.
+	// The page view shows one page at a time or, see [Document.SetViewMode],
+	// all pages one below the other. It supports the usual viewer gestures:
+	// Ctrl+wheel (Cmd on macOS) zooms around the pointer, dragging pans, a
+	// double tap switches between the fitted page and 100 %; showing one
+	// page, scrolling on past its top or bottom turns it. Once clicked, it
+	// takes the keyboard focus: Page Up/Down and Space scroll by a screen,
+	// Home/End go to the first and last page, the arrow keys scroll
+	// (Left/Right go to the previous and next page while the pages fit
+	// horizontally), Ctrl +/-/0 zoom.
 	//
-	// Pages are rendered in the background; the resolution of the main view
-	// follows the zoom level. Methods must be called from the Fyne main
-	// goroutine (or before the app runs).
+	// Pages are rendered in the background, those in view first; the
+	// resolution of the main view follows the zoom level. Methods must be
+	// called from the Fyne main goroutine (or before the app runs).
 	Document struct {
 		widget.BaseWidget
 
-		// BackgroundColor fills the area behind the page.
+		// BackgroundColor fills the area around the pages. If nil, the
+		// theme's separator color is used.
 		BackgroundColor color.Color
 		// SaveCallback, if set, shows a save button in the toolbar that calls
 		// it. Call Refresh after changing it.
@@ -70,7 +81,6 @@ type (
 		OnError func(page int, err error)
 
 		thumbnails []*Thumbnail
-		bigPage    *Page
 		area       *pageArea
 
 		base               *fyne.Container
@@ -82,9 +92,29 @@ type (
 		scrollContainer    *container.Scroll
 
 		toggleThumbnailsButton *widget.Button
+		viewModeButton         *widget.Button
 		zoomInButton           *widget.Button
 		zoomOutButton          *widget.Button
 		saveButton             *widget.Button
+
+		// scale is the zoom the page view shows.
+		scale    float64
+		viewMode ViewMode
+		// pageSizes are the sizes of all pages at zoom 1.
+		pageSizes []fyne.Size
+		layout    pageLayout
+		// views shows the pages in or next to the view, by page; spareViews
+		// are views to reuse.
+		views      map[int]*Page
+		spareViews []*Page
+		// anchor is the page point at the top left of the view; it stays
+		// there when the view is resized. view is the size it was taken at.
+		anchor viewAnchor
+		view   fyne.Size
+		// adjusting is set while the layout and the scroll offset change
+		// together; navigating while the view scrolls to a page that is
+		// made current.
+		adjusting, navigating bool
 
 		// fitHorizontal and fitVertical keep the page fitted to the view
 		// while the view is resized, until the zoom is changed otherwise.
@@ -104,12 +134,25 @@ type (
 		ctx         context.Context
 		cancel      context.CancelFunc
 		current     int
-		renderedDPI float64
 		renderTimer *time.Timer
-		// pending counts scheduled renders that have not been applied yet.
+		// pending counts scheduled renders that have not finished yet.
 		pending sync.WaitGroup
+		// jobs are the renders wanted; rendering is set while a render
+		// loop works through them, inflight is the render in progress.
+		jobs           []renderJob
+		rendering      bool
+		inflight       renderJob
+		inflightCancel context.CancelFunc
+		// rendered holds the page images for the main view, failed the
+		// resolution a page could not be rendered at.
+		rendered       map[int]*renderedPage
+		renderedPixels int
+		useClock       uint64
+		failed         map[int]float64
 	}
 )
+
+var emptyImage image.Image = image.NewGray(image.Rectangle{})
 
 func (d *Document) CreateRenderer() fyne.WidgetRenderer {
 	d.ExtendBaseWidget(d)
@@ -129,14 +172,18 @@ func NewDocument() *Document {
 		zoom:               binding.NewFloat(),
 		runOnMain:          fyne.Do,
 		modifiers:          currentKeyModifiers,
+		scale:              1,
+		views:              map[int]*Page{},
+		rendered:           map[int]*renderedPage{},
+		failed:             map[int]float64{},
 	}
 	_ = d.zoom.Set(1)
 
 	d.thumbnailScroller = container.NewHScroll(d.thumbnailContainer)
 
-	d.bigPage = NewPage()
 	d.area = newPageArea(d)
 	d.scrollContainer = container.NewScroll(d.area)
+	d.scrollContainer.OnScrolled = func(fyne.Position) { d.scrolled() }
 
 	d.zoomSlider = widget.NewSliderWithData(minZoom, maxZoom, d.zoom)
 	d.zoomSlider.Step = 0
@@ -196,6 +243,16 @@ func NewDocument() *Document {
 	d.zoomOutButton.Icon = fyne_lucide.Icon(fyne_lucide.IconZoomOut)
 	d.zoomOutButton.Importance = widget.LowImportance
 
+	d.viewModeButton = widget.NewButton("", func() {
+		if d.viewMode == ViewContinuous {
+			d.SetViewMode(ViewSinglePage)
+		} else {
+			d.SetViewMode(ViewContinuous)
+		}
+	})
+	d.viewModeButton.Importance = widget.LowImportance
+	d.updateViewModeButton()
+
 	d.saveButton = widget.NewButton("", nil)
 	d.saveButton.Icon = fyne_lucide.Icon(fyne_lucide.IconSave)
 	d.saveButton.Importance = widget.LowImportance
@@ -212,16 +269,18 @@ func NewDocument() *Document {
 	d.toolbar.Add(fitButton)
 	d.toolbar.Add(fitVerticalButton)
 	d.toolbar.Add(fitHorizontalButton)
+	d.toolbar.Add(d.viewModeButton)
 	d.toolbar.Add(d.saveButton)
 
-	d.base = container.NewBorder(
-		nil,
-		container.NewVBox(
-			d.toolbar,
-			d.thumbnailScroller,
-		),
-		nil, nil,
-		d.scrollContainer,
+	bottom := container.NewVBox(
+		d.toolbar,
+		d.thumbnailScroller,
+	)
+	// The view changes size with the window, but also when the thumbnail
+	// strip is shown or hidden.
+	d.base = container.New(
+		&afterLayout{layout: layout.NewBorderLayout(nil, bottom, nil, nil), after: d.viewResized},
+		bottom, d.scrollContainer,
 	)
 
 	d.ExtendBaseWidget(d)
@@ -296,11 +355,49 @@ func (d *Document) PageCount() int {
 	return len(d.bounds)
 }
 
-// CurrentPage returns the index (0-based) of the page shown in the main view.
+// CurrentPage returns the index (0-based) of the page shown in the main
+// view. Showing all pages, it is the page at the centre of the view, or
+// the one last gone to with [Document.ShowPage] or a key until the view is
+// scrolled.
 func (d *Document) CurrentPage() int {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	return d.current
+}
+
+// ViewMode returns how the main view shows the pages.
+func (d *Document) ViewMode() ViewMode {
+	return d.viewMode
+}
+
+// SetViewMode switches between showing one page at a time
+// ([ViewSinglePage], the default) and all pages one below the other
+// ([ViewContinuous]). The current page stays in view, as do the zoom and
+// the fit. The toolbar has a button for it, too.
+func (d *Document) SetViewMode(mode ViewMode) {
+	if mode == d.viewMode {
+		return
+	}
+	anchor := d.anchorOnPage(d.CurrentPage(), fyne.Position{})
+	d.viewMode = mode
+	d.updateViewModeButton()
+
+	d.relayout()
+	if offset, ok := d.anchorOffset(anchor); ok {
+		d.setOffset(offset)
+	}
+	d.navigating = true
+	d.viewChanged(0)
+	d.navigating = false
+}
+
+func (d *Document) updateViewModeButton() {
+	if d.viewMode == ViewContinuous {
+		d.viewModeButton.Icon = fyne_lucide.Icon(fyne_lucide.IconFiles)
+	} else {
+		d.viewModeButton.Icon = fyne_lucide.Icon(fyne_lucide.IconFile)
+	}
+	d.viewModeButton.Refresh()
 }
 
 func (d *Document) load(src *Source) {
@@ -323,17 +420,28 @@ func (d *Document) load(src *Source) {
 	d.source = src
 	d.bounds = bounds
 	d.ctx, d.cancel = ctx, cancel
+	d.current = 0
+	d.jobs, d.rendering, d.inflightCancel = nil, false, nil
+	d.rendered, d.renderedPixels = map[int]*renderedPage{}, 0
+	d.failed = map[int]float64{}
 	d.mutex.Unlock()
 
 	scale := d.canvasScale()
 
+	d.pageSizes = make([]fyne.Size, numPages)
 	d.thumbnails = make([]*Thumbnail, numPages)
 	objects := make([]fyne.CanvasObject, numPages)
 	dpis := make([]float64, numPages)
 	for i := range numPages {
 		pageNumber := i
+		d.pageSizes[i] = fyne.Size{
+			Width:  float32(float64(bounds[i].Dx()) * unitsPerPoint),
+			Height: float32(float64(bounds[i].Dy()) * unitsPerPoint),
+		}
+
 		thumbnail := NewThumbnail()
 		thumbnail.SetTitle(strconv.Itoa(pageNumber + 1))
+		thumbnail.SetSelected(i == 0)
 		thumbnail.OnTapped = func() {
 			d.ShowPage(pageNumber)
 		}
@@ -345,6 +453,7 @@ func (d *Document) load(src *Source) {
 	}
 	d.thumbnailContainer.Objects = objects
 	d.thumbnailContainer.Refresh()
+	d.thumbnailScroller.ScrollToOffset(fyne.Position{})
 
 	if numPages <= 1 {
 		d.toggleThumbnailsButton.Hide()
@@ -369,132 +478,87 @@ func (d *Document) load(src *Source) {
 					return
 				}
 				thumbnail.SetImage(img)
+				// The thumbnail stands in for the page until it is
+				// rendered.
+				d.showImages()
 			})
 		}
 	}()
 
-	d.mutex.Lock()
-	d.current = -1
-	d.mutex.Unlock()
-	if numPages > 0 {
-		d.ShowPage(0)
-	}
+	d.clearViews()
+	d.fitHorizontal, d.fitVertical = true, true
+	d.relayout()
+	d.applyFit()
+	d.setOffset(fyne.Position{})
+	d.viewChanged(0)
 }
 
-// applyScale shows the page at zoom. The zoom binding's listener calls it,
-// but only asynchronously; code that needs the new layout right away (a
-// fit, a page turn, zooming around a point) calls it directly.
+// applyScale shows the pages at zoom, keeping the page point at the centre
+// of the view in place. The zoom binding's listener calls it, but only
+// asynchronously; code that needs the new layout right away (a fit, a page
+// turn, zooming around a point) calls it directly.
 func (d *Document) applyScale(zoom float64) {
-	if zoom == d.bigPage.Scale {
+	view := d.scrollContainer.Size()
+	d.applyScaleAt(zoom, fyne.NewPos(view.Width/2, view.Height/2))
+}
+
+// applyScaleAt shows the pages at zoom, keeping the page point at view
+// position at in place.
+func (d *Document) applyScaleAt(zoom float64, at fyne.Position) {
+	if zoom == d.scale {
 		return
 	}
-	d.bigPage.Scale = zoom
-	d.bigPage.Refresh()
-	d.layoutArea()
-	d.scrollContainer.Refresh()
-	d.scheduleRender(zoomRenderDelay)
+	anchor := d.anchorAt(at)
+	d.scale = zoom
+	d.relayout()
+	if offset, ok := d.anchorOffset(anchor); ok {
+		d.setOffset(offset)
+	}
+	d.viewChanged(zoomRenderDelay)
 }
 
-// layoutArea sizes the scroll content for the current zoom without waiting
-// for the next layout pass, so scroll offsets can be set right away.
-func (d *Document) layoutArea() {
-	d.area.Resize(d.area.MinSize().Max(d.scrollContainer.Size()))
-}
-
-// ShowPage shows page (0-based) in the main view and zooms it to fit.
+// ShowPage makes page (0-based) current. Showing one page at a time, it
+// shows page fitted into the view. Showing all pages, it scrolls to the top
+// of page and keeps the zoom, or the fit applied to page.
 func (d *Document) ShowPage(page int) {
-	if d.setPage(page) {
-		d.ZoomToFit()
-		d.scheduleRender(0)
+	if d.viewMode == ViewSinglePage && page >= 0 && page < d.PageCount() && page != d.CurrentPage() {
+		d.fitHorizontal, d.fitVertical = true, true
 	}
+	d.turnPage(page, false)
 }
 
-// setPage makes page current and shows its thumbnail as a placeholder until
-// it is rendered. It reports false if page is out of range or already
-// current.
-func (d *Document) setPage(page int) bool {
+// setCurrent makes page the current page and selects its thumbnail.
+func (d *Document) setCurrent(page int) {
 	d.mutex.Lock()
-	if page < 0 || page >= len(d.bounds) || page == d.current {
-		d.mutex.Unlock()
-		return false
-	}
+	changed := d.current != page
 	d.current = page
-	d.renderedDPI = 0
-	bound := d.bounds[page]
 	d.mutex.Unlock()
-
+	if !changed {
+		return
+	}
 	for i, thumbnail := range d.thumbnails {
 		thumbnail.SetSelected(i == page)
 	}
-
-	var placeholder image.Image = image.NewGray(image.Rectangle{})
-	if page < len(d.thumbnails) {
-		placeholder = d.thumbnails[page].page.image.Image
-	}
-	d.bigPage.SetImage(placeholder)
-	d.bigPage.SetPageSize(fyne.Size{
-		Width:  float32(float64(bound.Dx()) * unitsPerPoint),
-		Height: float32(float64(bound.Dy()) * unitsPerPoint),
-	})
-	return true
+	d.revealThumbnail(page)
 }
 
-// scheduleRender renders the current page for the main view after delay,
-// unless it is already rendered at the needed resolution. A later call
-// replaces an earlier one that has not started yet.
-func (d *Document) scheduleRender(delay time.Duration) {
-	scale := d.canvasScale()
-	zoom := d.bigPage.Scale
-
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-
-	if d.source == nil || d.current < 0 {
+// revealThumbnail scrolls the thumbnail strip so the thumbnail of page is
+// visible.
+func (d *Document) revealThumbnail(page int) {
+	if page >= len(d.thumbnails) || !d.thumbnailScroller.Visible() {
 		return
 	}
-	if d.renderTimer != nil && d.renderTimer.Stop() {
-		d.pending.Done()
+	thumbnail := d.thumbnails[page]
+	x, width := thumbnail.Position().X, thumbnail.Size().Width
+	offset := d.thumbnailScroller.Offset
+	view := d.thumbnailScroller.Size().Width
+	switch {
+	case x < offset.X:
+		offset.X = x
+	case x+width > offset.X+view:
+		offset.X = x + width - view
 	}
-	d.renderTimer = nil
-
-	src, ctx, page := d.source, d.ctx, d.current
-	bound := d.bounds[page]
-	points := float64(max(bound.Dx(), 1) * max(bound.Dy(), 1))
-	dpi := math.Min(96*zoom*float64(scale), 72*math.Sqrt(maxRenderPixels/points))
-	// Rendering at a lower resolution than shown is visible, a slightly
-	// higher one is not worth the time.
-	if d.renderedDPI >= dpi && d.renderedDPI <= dpi*1.5 {
-		return
-	}
-
-	d.pending.Add(1)
-	d.renderTimer = time.AfterFunc(delay, func() {
-		defer d.pending.Done()
-		img, err := src.RenderPageContext(ctx, page, dpi)
-		if ctx.Err() != nil {
-			return
-		}
-		d.runOnMain(func() {
-			d.mutex.Lock()
-			stale := ctx.Err() != nil || d.current != page
-			if !stale && err == nil {
-				d.renderedDPI = dpi
-			}
-			d.mutex.Unlock()
-			switch {
-			case stale:
-			case err != nil:
-				d.reportError(page, err)
-			default:
-				d.bigPage.SetImage(img)
-			}
-		})
-	})
-}
-
-// waitRendered blocks until all scheduled renders are applied.
-func (d *Document) waitRendered() {
-	d.pending.Wait()
+	d.thumbnailScroller.ScrollToOffset(offset)
 }
 
 func (d *Document) reportError(page int, err error) {
@@ -515,8 +579,6 @@ func (d *Document) canvasScale() float32 {
 }
 
 func (d *Document) Refresh() {
-	d.bigPage.BackgroundColor = d.BackgroundColor
-
 	if d.SaveCallback != nil {
 		d.saveButton.OnTapped = d.SaveCallback
 		d.saveButton.Show()
@@ -524,7 +586,6 @@ func (d *Document) Refresh() {
 		d.saveButton.Hide()
 	}
 
-	d.bigPage.Refresh()
 	d.scrollContainer.Refresh()
 	d.thumbnailContainer.Refresh()
 	d.base.Refresh()
@@ -534,9 +595,7 @@ func (d *Document) Refresh() {
 // ShowPage or one of the ZoomToFit methods), the fit follows the new size.
 func (d *Document) Resize(size fyne.Size) {
 	d.BaseWidget.Resize(size)
-	if d.fitHorizontal || d.fitVertical {
-		d.fitZoom(d.fitHorizontal, d.fitVertical)
-	}
+	d.applyFit()
 }
 
 // Zoom sets the zoom factor; 1 shows the page at roughly its physical size.
@@ -547,47 +606,64 @@ func (d *Document) Zoom(scale float64) {
 }
 
 func (d *Document) setZoom(zoom float64) {
-	_ = d.zoom.Set(zoom)
 	d.applyScale(zoom)
+	_ = d.zoom.Set(zoom)
 }
 
 func clampZoom(scale float64) float64 {
 	return math.Max(minZoom, math.Min(maxZoom, scale))
 }
 
-// ZoomToFit scales the page so it fits completely into the view. The fit
-// is kept when the view is resized, until the zoom is changed otherwise;
-// the same holds for ZoomToFitVertical and ZoomToFitHorizontal.
+// ZoomToFit scales the current page so it fits completely into the view;
+// showing all pages, it also scrolls to the top of that page. The fit is
+// kept when the view is resized, until the zoom is changed otherwise; the
+// same holds for ZoomToFitVertical and ZoomToFitHorizontal.
 func (d *Document) ZoomToFit() {
 	d.fitZoom(true, true)
 }
 
-// ZoomToFitVertical scales the page to the height of the view.
+// ZoomToFitVertical scales the current page to the height of the view.
 func (d *Document) ZoomToFitVertical() {
 	d.fitZoom(false, true)
 }
 
-// ZoomToFitHorizontal scales the page to the width of the view.
+// ZoomToFitHorizontal scales the current page to the width of the view.
 func (d *Document) ZoomToFitHorizontal() {
 	d.fitZoom(true, false)
 }
 
 func (d *Document) fitZoom(horizontal, vertical bool) {
 	d.fitHorizontal, d.fitVertical = horizontal, vertical
+	d.applyFit()
+	if page := d.CurrentPage(); vertical && d.viewMode == ViewContinuous && d.layout.contains(page) {
+		d.scrollToPage(page, false)
+	}
+}
+
+// applyFit sets the zoom of the active fit, if any, for the current page.
+func (d *Document) applyFit() {
+	if !d.fitHorizontal && !d.fitVertical {
+		return
+	}
 	view := d.scrollContainer.Size()
-	page := d.bigPage.PageSize()
+	var page fyne.Size
+	if current := d.CurrentPage(); current < len(d.pageSizes) {
+		page = d.pageSizes[current]
+	}
 	if view.IsZero() || page.IsZero() {
 		// Applied by Resize once the view has a size.
 		return
 	}
 
 	scale := math.Inf(1)
-	if horizontal {
+	if d.fitHorizontal {
 		scale = math.Min(scale, float64(view.Width/page.Width))
 	}
-	if vertical {
+	if d.fitVertical {
 		scale = math.Min(scale, float64(view.Height/page.Height))
 	}
 	d.fitScale = clampZoom(scale)
-	d.setZoom(d.fitScale)
+	// The page point at the top left stays, as when resizing.
+	d.applyScaleAt(d.fitScale, fyne.Position{})
+	_ = d.zoom.Set(d.fitScale)
 }
