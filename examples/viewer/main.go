@@ -1,6 +1,9 @@
-// Command viewer is a minimal PDF viewer built on fyne-pdf.
+// Command viewer is a minimal PDF viewer built on fyne-pdf. It is a module
+// of its own, so the library does not depend on goprint; run it from its
+// directory:
 //
-//	go run ./examples/viewer [-print-dialog native|fyne] [file.pdf]
+//	cd examples/viewer
+//	go run . [-print-dialog native|fyne] [file.pdf]
 //
 // Without a file it starts empty; open a PDF with File > Open (Ctrl+O).
 // File > Print (Ctrl+P) prints it through goprint: -print-dialog native
