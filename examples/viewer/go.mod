@@ -55,7 +55,7 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tannevaled/gobig2 v0.2.0 // indirect
-	github.com/timzifer/cera v0.8.0 // indirect
+	github.com/timzifer/cera v0.9.0 // indirect
 	github.com/timzifer/fyne_iconkit v0.1.0 // indirect
 	github.com/timzifer/fyne_lucide v1.2.0 // indirect
 	github.com/timzifer/fyne_tabler v1.2.0 // indirect
@@ -70,3 +70,5 @@ require (
 
 // The example builds against the library in this repository.
 replace github.com/timzifer/fyne-pdf => ../..
+
+replace github.com/ajroetker/go-highway => github.com/timzifer/go-highway v0.0.13-timzifer.1
