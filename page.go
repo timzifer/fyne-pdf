@@ -3,6 +3,7 @@ package pdf
 import (
 	"image"
 	"image/color"
+	"slices"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -14,20 +15,34 @@ type (
 	// multiplied by Scale, which is also its minimum size. A larger widget
 	// centres the page on BackgroundColor. The image is scaled to the page
 	// size, so it can be rendered at any resolution; the aspect ratio is
-	// kept.
+	// kept. Highlights, see [Page.SetHighlights], are drawn over the image.
 	Page struct {
 		widget.BaseWidget
 
-		image    *canvas.Image
-		pageSize fyne.Size
+		image      *canvas.Image
+		pageSize   fyne.Size
+		highlights []Highlight
 
 		Scale           float64
 		BackgroundColor color.Color
 	}
 
+	// Highlight marks an area of a [Page], such as a search result: a
+	// rectangle in the units of [Page.PageSize] (at Scale 1, origin at the
+	// top left of the page), filled with Color over the page image. Use a
+	// translucent color to keep the text readable.
+	Highlight struct {
+		Position fyne.Position
+		Size     fyne.Size
+		Color    color.Color
+	}
+
 	pageRenderer struct {
 		pageWidget *Page
 		background *canvas.Rectangle
+		// highlights draw the highlights of the page, in order.
+		highlights []*canvas.Rectangle
+		objects    []fyne.CanvasObject
 	}
 )
 
@@ -50,6 +65,16 @@ func (p *pageRenderer) Layout(size fyne.Size) {
 		max(0, (size.Height-page.Height)/2),
 	))
 	p.pageWidget.image.Resize(page)
+
+	origin := p.pageWidget.image.Position()
+	scale := float32(p.pageWidget.Scale)
+	// Until Refresh catches up with new highlights, the old rectangles
+	// keep their places.
+	for i, rect := range p.highlights[:min(len(p.highlights), len(p.pageWidget.highlights))] {
+		h := p.pageWidget.highlights[i]
+		rect.Move(origin.AddXY(h.Position.X*scale, h.Position.Y*scale))
+		rect.Resize(fyne.NewSize(h.Size.Width*scale, h.Size.Height*scale))
+	}
 }
 
 func (p *pageRenderer) MinSize() fyne.Size {
@@ -61,15 +86,24 @@ func (p *pageRenderer) MinSize() fyne.Size {
 }
 
 func (p *pageRenderer) Objects() []fyne.CanvasObject {
-	return []fyne.CanvasObject{
-		p.background,
-		p.pageWidget.image,
-	}
+	return p.objects
 }
 
 func (p *pageRenderer) Refresh() {
 	p.background.FillColor = p.pageWidget.BackgroundColor
 	p.background.Refresh()
+
+	highlights := p.pageWidget.highlights
+	for len(p.highlights) < len(highlights) {
+		p.highlights = append(p.highlights, canvas.NewRectangle(color.Transparent))
+	}
+	p.highlights = p.highlights[:len(highlights)]
+	p.objects = append(p.objects[:0], p.background, p.pageWidget.image)
+	for i, h := range highlights {
+		p.highlights[i].FillColor = h.Color
+		p.highlights[i].Refresh()
+		p.objects = append(p.objects, p.highlights[i])
+	}
 
 	p.Layout(p.pageWidget.Size())
 	p.pageWidget.image.Refresh()
@@ -77,10 +111,12 @@ func (p *pageRenderer) Refresh() {
 
 func (p *Page) CreateRenderer() fyne.WidgetRenderer {
 	p.ExtendBaseWidget(p)
-	return &pageRenderer{
+	r := &pageRenderer{
 		background: canvas.NewRectangle(p.BackgroundColor),
 		pageWidget: p,
 	}
+	r.Refresh()
+	return r
 }
 
 // PageSize returns the size of the page at Scale 1. Unless set with
@@ -106,6 +142,21 @@ func (p *Page) SetPageSize(size fyne.Size) {
 // SetImage replaces the displayed page image.
 func (p *Page) SetImage(pageImage image.Image) {
 	p.image.Image = pageImage
+	p.Refresh()
+}
+
+// Highlights returns the highlights drawn over the page.
+func (p *Page) Highlights() []Highlight {
+	return slices.Clone(p.highlights)
+}
+
+// SetHighlights replaces the highlights drawn over the page; nil removes
+// them.
+func (p *Page) SetHighlights(highlights []Highlight) {
+	if slices.Equal(p.highlights, highlights) {
+		return
+	}
+	p.highlights = slices.Clone(highlights)
 	p.Refresh()
 }
 

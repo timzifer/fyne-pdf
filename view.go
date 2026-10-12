@@ -229,6 +229,7 @@ func (d *Document) updateViews() {
 		}
 		view.Scale = d.scale
 		view.pageSize = d.pageSizes[page]
+		view.SetHighlights(d.highlightsOf(page))
 	}
 	d.showImages()
 	d.area.Refresh()
@@ -251,6 +252,7 @@ func (d *Document) newView() *Page {
 func (d *Document) clearViews() {
 	for page, view := range d.views {
 		view.SetImage(emptyImage)
+		view.SetHighlights(nil)
 		d.spareViews = append(d.spareViews, view)
 		delete(d.views, page)
 	}

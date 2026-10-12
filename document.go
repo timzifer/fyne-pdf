@@ -64,6 +64,9 @@ type (
 	// (Left/Right go to the previous and next page while the pages fit
 	// horizontally), Ctrl +/-/0 zoom.
 	//
+	// [Document.Search] finds text in the background and highlights the
+	// results on the pages; F3 and Shift+F3 go to the next and previous one.
+	//
 	// Pages are rendered in the background, those in view first; the
 	// resolution of the main view follows the zoom level. Methods must be
 	// called from the Fyne main goroutine (or before the app runs).
@@ -79,6 +82,14 @@ type (
 		// OnError is called on the main goroutine when a page cannot be
 		// rendered. If nil, the error is logged.
 		OnError func(page int, err error)
+		// OnSearchChanged is called on the main goroutine when the search
+		// changes: results found, the current result, the search done or
+		// cleared. See [Document.Search].
+		OnSearchChanged func()
+		// HighlightColor fills the search results on the pages,
+		// CurrentHighlightColor the current one. If nil, translucent
+		// yellow and orange are used.
+		HighlightColor, CurrentHighlightColor color.Color
 
 		thumbnails []*Thumbnail
 		area       *pageArea
@@ -121,6 +132,8 @@ type (
 		// fitScale is the zoom the last fit set.
 		fitHorizontal, fitVertical bool
 		fitScale                   float64
+		// search is the state of the search, see Document.Search.
+		search documentSearch
 		// modifiers returns the key modifiers held; replaced in tests.
 		modifiers func() fyne.KeyModifier
 		// runOnMain applies results of background renders; fyne.Do, replaced
@@ -401,6 +414,7 @@ func (d *Document) updateViewModeButton() {
 }
 
 func (d *Document) load(src *Source) {
+	d.resetSearch()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// The bounds are read once here: the main goroutine must not wait for
