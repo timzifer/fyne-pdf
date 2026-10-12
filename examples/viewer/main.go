@@ -88,10 +88,21 @@ func main() {
 	w.Canvas().AddShortcut(findItem.Shortcut, func(fyne.Shortcut) { search.show(w.Canvas()) })
 	nextItem := fyne.NewMenuItem("Find Next (F3)", v.doc.NextSearchResult)
 	previousItem := fyne.NewMenuItem("Find Previous (Shift+F3)", v.doc.PreviousSearchResult)
-	w.SetMainMenu(fyne.NewMainMenu(
+
+	// View > Link Borders draws the boxes hyperref puts around links, as
+	// Acrobat and Firefox do.
+	linkBordersItem := fyne.NewMenuItem("Link Borders", nil)
+	mainMenu := fyne.NewMainMenu(
 		fyne.NewMenu("File", openItem, printItem),
 		fyne.NewMenu("Edit", findItem, nextItem, previousItem),
-	))
+		fyne.NewMenu("View", linkBordersItem),
+	)
+	linkBordersItem.Action = func() {
+		v.doc.SetShowLinkBorders(!v.doc.ShowLinkBorders())
+		linkBordersItem.Checked = v.doc.ShowLinkBorders()
+		mainMenu.Refresh()
+	}
+	w.SetMainMenu(mainMenu)
 
 	if path := flag.Arg(0); path != "" {
 		contents, err := os.ReadFile(path)

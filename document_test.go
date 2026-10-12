@@ -572,3 +572,37 @@ func TestThumbnail(t *testing.T) {
 	// A thumbnail without OnTapped must not panic.
 	NewThumbnail().Tapped(nil)
 }
+
+func TestDocumentShowLinkBorders(t *testing.T) {
+	d := newTestDocument(t)
+	loadAndWait(t, d, linkPDF())
+	if d.ShowLinkBorders() {
+		t.Fatal("link borders shown by default")
+	}
+	before := currentView(d).image.Image
+	if n := bluePixels(before); n != 0 {
+		t.Fatalf("%d blue pixels without link borders", n)
+	}
+
+	d.SetShowLinkBorders(true)
+	if !d.ShowLinkBorders() {
+		t.Fatal("ShowLinkBorders() = false after SetShowLinkBorders(true)")
+	}
+	// The old image stays until the page is rendered again.
+	if currentView(d).image.Image != before {
+		t.Error("image replaced before the new render")
+	}
+	settle(d)
+	if n := bluePixels(currentView(d).image.Image); n == 0 {
+		t.Error("page not rendered again with link borders")
+	}
+	if n := bluePixels(d.thumbnails[0].page.image.Image); n != 0 {
+		t.Errorf("thumbnail shows link borders (%d blue pixels)", n)
+	}
+
+	d.SetShowLinkBorders(false)
+	settle(d)
+	if n := bluePixels(currentView(d).image.Image); n != 0 {
+		t.Errorf("%d blue pixels after switching link borders off", n)
+	}
+}
