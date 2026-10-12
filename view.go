@@ -232,6 +232,7 @@ func (d *Document) updateViews() {
 		view.SetHighlights(d.highlightsOf(page))
 	}
 	d.loadLinks(live)
+	d.loadTexts(live)
 	d.showImages()
 	d.area.Refresh()
 }

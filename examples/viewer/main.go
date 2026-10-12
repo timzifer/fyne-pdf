@@ -10,6 +10,7 @@
 // pages and listed beside them; Enter and F3 go to the next result,
 // Shift+F3 to the previous one, a click in the list to that result;
 // -find searches for text right away.
+// The text tool of the toolbar selects text; Edit > Copy (Ctrl+C) copies it.
 // The outline of a document with bookmarks is shown beside the pages.
 // An encrypted PDF asks for its password; without the right to print,
 // File > Print is disabled.
@@ -50,6 +51,7 @@ type viewer struct {
 
 	mainMenu  *fyne.MainMenu
 	printItem *fyne.MenuItem
+	copyItem  *fyne.MenuItem
 	// onLoaded, if set, runs once the next PDF is loaded.
 	onLoaded func()
 }
@@ -99,6 +101,10 @@ func main() {
 	findItem := fyne.NewMenuItem("Find…", func() { search.show(w.Canvas()) })
 	findItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyF, Modifier: fyne.KeyModifierShortcutDefault}
 	w.Canvas().AddShortcut(findItem.Shortcut, func(fyne.Shortcut) { search.show(w.Canvas()) })
+	// Edit > Copy copies the text selected with the text tool of the
+	// toolbar; Ctrl+C does so while the pages have the focus.
+	copyItem := fyne.NewMenuItem("Copy", func() { v.doc.CopySelection() })
+	v.copyItem = copyItem
 	nextItem := fyne.NewMenuItem("Find Next (F3)", v.doc.NextSearchResult)
 	previousItem := fyne.NewMenuItem("Find Previous (Shift+F3)", v.doc.PreviousSearchResult)
 
@@ -107,7 +113,7 @@ func main() {
 	linkBordersItem := fyne.NewMenuItem("Link Borders", nil)
 	mainMenu := fyne.NewMainMenu(
 		fyne.NewMenu("File", openItem, printItem),
-		fyne.NewMenu("Edit", findItem, nextItem, previousItem),
+		fyne.NewMenu("Edit", copyItem, fyne.NewMenuItemSeparator(), findItem, nextItem, previousItem),
 		fyne.NewMenu("View", linkBordersItem),
 	)
 	linkBordersItem.Action = func() {
@@ -175,6 +181,7 @@ func (v *viewer) loaded(contents []byte, name string) {
 	// cera renders whatever the permissions say; not printing a document
 	// that does not allow it is up to the viewer.
 	v.printItem.Disabled = v.doc.Permissions()&pdf.PermPrint == 0
+	v.copyItem.Disabled = v.doc.Permissions()&pdf.PermCopy == 0
 	v.mainMenu.Refresh()
 
 	if f := v.onLoaded; f != nil {

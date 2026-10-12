@@ -20,6 +20,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/cockroachdb/errors"
+	"github.com/timzifer/cera"
 	"github.com/timzifer/fyne_lucide"
 	"github.com/timzifer/fyne_tabler"
 )
@@ -123,6 +124,7 @@ type (
 		outlineButton          *widget.Button
 		commentsButton         *widget.Button
 		viewModeButton         *widget.Button
+		toolButton             *widget.Button
 		zoomInButton           *widget.Button
 		zoomOutButton          *widget.Button
 		saveButton             *widget.Button
@@ -158,6 +160,10 @@ type (
 		// passwordEntry is its entry; nil if no dialog is shown.
 		passwordDialog *dialog.FormDialog
 		passwordEntry  *widget.Entry
+		// tool is what dragging does; selection is the selected text, nil
+		// for none.
+		tool      Tool
+		selection *textSelection
 		// outline is the outline panel, comments the comments panel.
 		outline  *outlinePanel
 		comments *commentsPanel
@@ -194,8 +200,10 @@ type (
 		useClock       uint64
 		failed         map[int]float64
 		// links are the links by page, nil while being read; a page
-		// missing has not been asked for.
+		// missing has not been asked for. texts are the texts of the
+		// pages alike, read while a tool needs them.
 		links map[int][]Link
+		texts map[int]*cera.PageText
 		// renderOptions are those of the main view; images rendered with
 		// others are shown until they are rendered again.
 		renderOptions RenderOptions
@@ -228,6 +236,7 @@ func NewDocument() *Document {
 		rendered:           map[int]*renderedPage{},
 		failed:             map[int]float64{},
 		links:              map[int][]Link{},
+		texts:              map[int]*cera.PageText{},
 	}
 	_ = d.zoom.Set(1)
 
@@ -305,6 +314,16 @@ func NewDocument() *Document {
 	d.viewModeButton.Importance = widget.LowImportance
 	d.updateViewModeButton()
 
+	d.toolButton = widget.NewButton("", func() {
+		if d.tool == ToolSelect {
+			d.SetTool(ToolNone)
+		} else {
+			d.SetTool(ToolSelect)
+		}
+	})
+	d.toolButton.Icon = fyne_lucide.Icon(fyne_lucide.IconTextCursor)
+	d.toolButton.Importance = widget.LowImportance
+
 	d.saveButton = widget.NewButton("", nil)
 	d.saveButton.Icon = fyne_lucide.Icon(fyne_lucide.IconSave)
 	d.saveButton.Importance = widget.LowImportance
@@ -339,6 +358,7 @@ func NewDocument() *Document {
 	d.toolbar.Add(fitVerticalButton)
 	d.toolbar.Add(fitHorizontalButton)
 	d.toolbar.Add(d.viewModeButton)
+	d.toolbar.Add(d.toolButton)
 	d.toolbar.Add(d.commentsButton)
 	d.toolbar.Add(d.saveButton)
 
@@ -653,7 +673,9 @@ func (d *Document) load(src *Source) {
 	d.rendered, d.renderedPixels = map[int]*renderedPage{}, 0
 	d.failed = map[int]float64{}
 	d.links = map[int][]Link{}
+	d.texts = map[int]*cera.PageText{}
 	d.mutex.Unlock()
+	d.selection = nil
 
 	scale := d.canvasScale()
 

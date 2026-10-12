@@ -47,6 +47,10 @@ no cgo PDF library, no external binaries.
   annotation and marks it; a tap on an annotation on the page selects its
   row and shows the thread beside it. `Annotations(page)`,
   `ShowAnnotation(a)`; `Source.Annotations(page)` without the widget
+- Text selection: `SetTool(pdf.ToolSelect)` (or the text button in the
+  toolbar) selects text by dragging, a double click a word, Ctrl+A the
+  page; Ctrl+C or `CopySelection` copies it unless the document forbids it
+  (`PermCopy`); `SelectedText()`
 - Encrypted PDFs: `LoadFromMemory` asks for the password with a dialog (or
   `PasswordCallback`), `OnLoaded` reports the loaded PDF; `Encrypted()` and
   `Permissions()` (`PermPrint`, `PermCopy`, …) tell what the author allows —

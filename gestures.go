@@ -50,8 +50,10 @@ type (
 		widget.BaseWidget
 
 		doc *Document
-		// overLink is set while the pointer is over a link.
-		overLink bool
+		// cursor is the pointer for what is under it.
+		cursor desktop.Cursor
+		// selecting is set while a drag selects text.
+		selecting bool
 	}
 
 	// pageScroll is the main scroll view. It handles the wheel: Ctrl+wheel
@@ -150,13 +152,23 @@ func (a *pageScroll) Scrolled(ev *fyne.ScrollEvent) {
 	}
 }
 
-// Dragged pans the page.
+// Dragged pans the page, or selects text with ToolSelect.
 func (a *pageArea) Dragged(ev *fyne.DragEvent) {
 	d := a.doc
+	if d.tool == ToolSelect {
+		if !a.selecting {
+			a.selecting = true
+			d.startSelection(ev.Position.Subtract(ev.Dragged))
+		}
+		d.extendSelection(ev.Position)
+		return
+	}
 	d.scrollTo(d.scrollContainer.Offset.Subtract(ev.Dragged))
 }
 
-func (a *pageArea) DragEnd() {}
+func (a *pageArea) DragEnd() {
+	a.selecting = false
+}
 
 // Tapped follows a link. It focuses the view on touch devices; desktop
 // focuses on MouseDown.
@@ -172,12 +184,17 @@ func (a *pageArea) Tapped(ev *fyne.PointEvent) {
 		return
 	}
 	d.comments.clearSelection()
+	d.ClearSelection()
 }
 
 // DoubleTapped switches between the fitted page and 100 %, zooming in at
-// the tapped point.
+// the tapped point; with ToolSelect, it selects the word.
 func (a *pageArea) DoubleTapped(ev *fyne.PointEvent) {
 	d := a.doc
+	if d.tool == ToolSelect {
+		d.selectWord(ev.Position)
+		return
+	}
 	if d.fitHorizontal && d.fitVertical {
 		d.zoomAt(1, ev.Position.Subtract(d.scrollContainer.Offset))
 		return
@@ -221,6 +238,9 @@ func (a *pageArea) TypedKey(ev *fyne.KeyEvent) {
 		} else {
 			d.scrollScreen(1)
 		}
+	case fyne.KeyEscape:
+		d.ClearSelection()
+		d.comments.clearSelection()
 	case fyne.KeyF3:
 		if d.modifiers()&fyne.KeyModifierShift != 0 {
 			d.PreviousSearchResult()
@@ -250,8 +270,20 @@ func (a *pageArea) TypedKey(ev *fyne.KeyEvent) {
 	}
 }
 
-// TypedShortcut zooms with Ctrl (Cmd on macOS) and +, - or 0.
+// TypedShortcut zooms with Ctrl (Cmd on macOS) and +, - or 0; Ctrl+C
+// copies the selected text, Ctrl+A selects the text of the page with
+// ToolSelect.
 func (a *pageArea) TypedShortcut(s fyne.Shortcut) {
+	switch s.(type) {
+	case *fyne.ShortcutCopy:
+		a.doc.CopySelection()
+		return
+	case *fyne.ShortcutSelectAll:
+		if a.doc.tool == ToolSelect {
+			a.doc.selectPage()
+		}
+		return
+	}
 	cs, ok := s.(*desktop.CustomShortcut)
 	if !ok || cs.Modifier&^fyne.KeyModifierShift != fyne.KeyModifierShortcutDefault {
 		return

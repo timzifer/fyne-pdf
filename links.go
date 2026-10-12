@@ -151,23 +151,23 @@ var (
 	_ desktop.Cursorable = (*pageArea)(nil)
 )
 
-// MouseIn and MouseMoved track whether the pointer is over a link.
+// MouseIn and MouseMoved choose the pointer for what is under it.
 func (a *pageArea) MouseIn(ev *desktop.MouseEvent) {
 	a.MouseMoved(ev)
 }
 
 func (a *pageArea) MouseMoved(ev *desktop.MouseEvent) {
-	_, a.overLink = a.doc.linkAt(ev.Position)
+	a.cursor = a.doc.cursor(ev.Position)
 }
 
 func (a *pageArea) MouseOut() {
-	a.overLink = false
+	a.cursor = desktop.DefaultCursor
 }
 
-// Cursor is the hand over a link.
+// Cursor is a hand over a link, an I-beam over text while selecting it.
 func (a *pageArea) Cursor() desktop.Cursor {
-	if a.overLink {
-		return desktop.PointerCursor
+	if a.cursor == nil {
+		return desktop.DefaultCursor
 	}
-	return desktop.DefaultCursor
+	return a.cursor
 }
