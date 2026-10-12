@@ -11,6 +11,10 @@
 // Shift+F3 to the previous one, a click in the list to that result;
 // -find searches for text right away.
 // The text tool of the toolbar selects text; Edit > Copy (Ctrl+C) copies it.
+// Annotate picks a tool to highlight, underline or strike out text, to add
+// notes and text boxes, to draw and to draw shapes; Edit > Undo and Redo
+// (Ctrl+Z, Ctrl+Y) take changes back, Delete removes the selected
+// annotation, the save button writes the document with them.
 // The outline of a document with bookmarks is shown beside the pages.
 // An encrypted PDF asks for its password; without the right to print,
 // File > Print is disabled.
@@ -26,6 +30,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/user"
 	"path/filepath"
 
 	"fyne.io/fyne/v2"
@@ -52,6 +57,8 @@ type viewer struct {
 	mainMenu  *fyne.MainMenu
 	printItem *fyne.MenuItem
 	copyItem  *fyne.MenuItem
+	// windowTitle is the window title without the mark of changes.
+	windowTitle string
 	// onLoaded, if set, runs once the next PDF is loaded.
 	onLoaded func()
 }
@@ -111,11 +118,58 @@ func main() {
 	// View > Link Borders draws the boxes hyperref puts around links, as
 	// Acrobat and Firefox do.
 	linkBordersItem := fyne.NewMenuItem("Link Borders", nil)
+	undoItem := fyne.NewMenuItem("Undo (Ctrl+Z)", v.doc.Undo)
+	redoItem := fyne.NewMenuItem("Redo (Ctrl+Y)", v.doc.Redo)
+	annotateMenu := fyne.NewMenu("Annotate")
+	for _, tool := range []struct {
+		label string
+		tool  pdf.Tool
+	}{
+		{"Pan", pdf.ToolNone}, {"Select Text", pdf.ToolSelect},
+		{"Highlight", pdf.ToolHighlight}, {"Underline", pdf.ToolUnderline}, {"Strikethrough", pdf.ToolStrikeOut},
+		{"Note", pdf.ToolNote}, {"Text Box", pdf.ToolFreeText},
+		{"Draw", pdf.ToolInk}, {"Rectangle", pdf.ToolRect}, {"Ellipse", pdf.ToolEllipse}, {"Line", pdf.ToolLine},
+	} {
+		item := fyne.NewMenuItem(tool.label, func() { v.doc.SetTool(tool.tool) })
+		annotateMenu.Items = append(annotateMenu.Items, item)
+	}
 	mainMenu := fyne.NewMainMenu(
 		fyne.NewMenu("File", openItem, printItem),
-		fyne.NewMenu("Edit", copyItem, fyne.NewMenuItemSeparator(), findItem, nextItem, previousItem),
+		fyne.NewMenu("Edit", undoItem, redoItem, fyne.NewMenuItemSeparator(), copyItem, fyne.NewMenuItemSeparator(), findItem, nextItem, previousItem),
 		fyne.NewMenu("View", linkBordersItem),
+		annotateMenu,
 	)
+	// The menus follow the tool and the history.
+	update := func() {
+		undoItem.Disabled, redoItem.Disabled = !v.doc.CanUndo(), !v.doc.CanRedo()
+		tools := []pdf.Tool{pdf.ToolNone, pdf.ToolSelect, pdf.ToolHighlight, pdf.ToolUnderline, pdf.ToolStrikeOut,
+			pdf.ToolNote, pdf.ToolFreeText, pdf.ToolInk, pdf.ToolRect, pdf.ToolEllipse, pdf.ToolLine}
+		for i, item := range annotateMenu.Items {
+			item.Checked = v.doc.Tool() == tools[i]
+		}
+		mainMenu.Refresh()
+		v.showTitle()
+	}
+	for _, item := range annotateMenu.Items {
+		action := item.Action
+		item.Action = func() { action(); update() }
+	}
+	v.doc.OnChanged = update
+	if u, err := user.Current(); err == nil {
+		v.doc.Author = u.Username
+	}
+	// Changes are not lost without asking.
+	w.SetCloseIntercept(func() {
+		if !v.doc.Modified() {
+			w.Close()
+			return
+		}
+		dialog.ShowConfirm("Unsaved changes", "Close without saving the changes?", func(ok bool) {
+			if ok {
+				w.Close()
+			}
+		}, w)
+	})
 	linkBordersItem.Action = func() {
 		v.doc.SetShowLinkBorders(!v.doc.ShowLinkBorders())
 		linkBordersItem.Checked = v.doc.ShowLinkBorders()
@@ -123,6 +177,7 @@ func main() {
 	}
 	w.SetMainMenu(mainMenu)
 	v.mainMenu = mainMenu
+	update()
 
 	w.SetContent(container.NewBorder(search.bar, nil, nil, nil, search.content))
 	w.Resize(fyne.NewSize(1024, 768))
@@ -173,7 +228,8 @@ func (v *viewer) loaded(contents []byte, name string) {
 		title = t + " – " + name
 		v.title = t
 	}
-	v.window.SetTitle(fmt.Sprintf("%s (%d pages)", title, v.doc.PageCount()))
+	v.windowTitle = fmt.Sprintf("%s (%d pages)", title, v.doc.PageCount())
+	v.showTitle()
 
 	// Documents with bookmarks open with the outline beside the pages.
 	v.doc.ShowOutline(len(v.doc.Outline()) > 0)
@@ -197,7 +253,7 @@ func (v *viewer) showPrintDialog() {
 		dialog.ShowInformation("Print", "Open a PDF first.", v.window)
 		return
 	}
-	doc := goprint.PDFBytes(v.title, v.contents)
+	doc := goprint.PDFBytes(v.title, v.doc.Contents())
 	// Both dialogs report back on the UI goroutine. Cancelling, and saving
 	// as PDF in fyneprint's dialog, count as goprint.ErrCanceled.
 	done := func(_ *goprint.Job, _ goprint.Settings, err error) {
@@ -236,14 +292,29 @@ func (v *viewer) showSaveDialog() {
 		if err != nil || w == nil {
 			return
 		}
-		_, err = w.Write(v.contents)
+		err = v.doc.Save(w)
 		if cerr := w.Close(); err == nil {
 			err = cerr
 		}
 		if err != nil {
 			dialog.ShowError(err, v.window)
+			return
 		}
+		v.contents = v.doc.Contents()
 	}, v.window)
 	d.SetFileName(v.name)
 	d.Show()
+}
+
+// showTitle titles the window after the document, marked while it has
+// unsaved changes.
+func (v *viewer) showTitle() {
+	title := v.windowTitle
+	if title == "" {
+		title = "PDF Viewer"
+	}
+	if v.doc.Modified() {
+		title = "* " + title
+	}
+	v.window.SetTitle(title)
 }

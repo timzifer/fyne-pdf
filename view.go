@@ -75,6 +75,9 @@ func (r *pageAreaRenderer) Refresh() {
 	for _, page := range pages {
 		r.objects = append(r.objects, d.views[page])
 	}
+	if d.sketch != nil {
+		r.objects = append(r.objects, d.sketch.objects...)
+	}
 	r.Layout(r.area.Size())
 }
 

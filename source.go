@@ -27,6 +27,9 @@ type Source struct {
 	doc *cera.Document
 	// text is the text index for searching, made on first use.
 	text *cera.TextIndex
+	// contents and password are what the PDF was opened from.
+	contents []byte
+	password string
 }
 
 var (
@@ -93,7 +96,7 @@ func OpenSourceWithPassword(contents []byte, password string) (*Source, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open pdf")
 	}
-	return &Source{doc: doc}, nil
+	return &Source{doc: doc, contents: contents, password: password}, nil
 }
 
 // Encrypted reports whether the PDF is encrypted; false after Close.

@@ -152,22 +152,37 @@ func (a *pageScroll) Scrolled(ev *fyne.ScrollEvent) {
 	}
 }
 
-// Dragged pans the page, or selects text with ToolSelect.
+// Dragged pans the page, or selects text or draws with a tool.
 func (a *pageArea) Dragged(ev *fyne.DragEvent) {
 	d := a.doc
-	if d.tool == ToolSelect {
+	switch {
+	case d.tool.selectsText():
 		if !a.selecting {
 			a.selecting = true
 			d.startSelection(ev.Position.Subtract(ev.Dragged))
 		}
 		d.extendSelection(ev.Position)
-		return
+	case d.tool.draws():
+		if d.sketch == nil {
+			d.startSketch(ev.Position.Subtract(ev.Dragged))
+		}
+		d.extendSketch(ev.Position)
+	default:
+		d.scrollTo(d.scrollContainer.Offset.Subtract(ev.Dragged))
 	}
-	d.scrollTo(d.scrollContainer.Offset.Subtract(ev.Dragged))
 }
 
+// DragEnd marks the selected text with a text markup tool, or adds what a
+// drawing tool drew.
 func (a *pageArea) DragEnd() {
-	a.selecting = false
+	d := a.doc
+	if a.selecting {
+		a.selecting = false
+		d.markSelection()
+	}
+	if d.sketch != nil {
+		d.finishSketch()
+	}
 }
 
 // Tapped follows a link. It focuses the view on touch devices; desktop
@@ -175,6 +190,17 @@ func (a *pageArea) DragEnd() {
 func (a *pageArea) Tapped(ev *fyne.PointEvent) {
 	a.focus()
 	d := a.doc
+	switch d.tool {
+	case ToolNote:
+		d.placeNote(ev.Position)
+		return
+	case ToolFreeText:
+		if page := d.layout.pageAt(ev.Position.Y, d.areaSize()); page >= 0 && d.layout.contains(page) {
+			x, y := d.pagePoint(page, ev.Position)
+			d.placeFreeText(page, Rect{X0: x, Y0: y, X1: x, Y1: y})
+		}
+		return
+	}
 	if l, ok := d.linkAt(ev.Position); ok {
 		d.followLink(l)
 		return
@@ -191,8 +217,9 @@ func (a *pageArea) Tapped(ev *fyne.PointEvent) {
 // the tapped point; with ToolSelect, it selects the word.
 func (a *pageArea) DoubleTapped(ev *fyne.PointEvent) {
 	d := a.doc
-	if d.tool == ToolSelect {
+	if d.tool.selectsText() {
 		d.selectWord(ev.Position)
+		d.markSelection()
 		return
 	}
 	if d.fitHorizontal && d.fitVertical {
@@ -241,6 +268,8 @@ func (a *pageArea) TypedKey(ev *fyne.KeyEvent) {
 	case fyne.KeyEscape:
 		d.ClearSelection()
 		d.comments.clearSelection()
+	case fyne.KeyDelete:
+		d.deleteSelected()
 	case fyne.KeyF3:
 		if d.modifiers()&fyne.KeyModifierShift != 0 {
 			d.PreviousSearchResult()
@@ -278,8 +307,14 @@ func (a *pageArea) TypedShortcut(s fyne.Shortcut) {
 	case *fyne.ShortcutCopy:
 		a.doc.CopySelection()
 		return
+	case *fyne.ShortcutUndo:
+		a.doc.Undo()
+		return
+	case *fyne.ShortcutRedo:
+		a.doc.Redo()
+		return
 	case *fyne.ShortcutSelectAll:
-		if a.doc.tool == ToolSelect {
+		if a.doc.tool.selectsText() {
 			a.doc.selectPage()
 		}
 		return
@@ -298,6 +333,14 @@ func (a *pageArea) TypedShortcut(s fyne.Shortcut) {
 		d.zoomAt(d.scale/zoomKeyFactor, anchor)
 	case fyne.Key0:
 		d.zoomAt(1, anchor)
+	case fyne.KeyY:
+		d.Redo()
+	case fyne.KeyZ:
+		if cs.Modifier&fyne.KeyModifierShift != 0 {
+			d.Redo()
+		} else {
+			d.Undo()
+		}
 	}
 }
 

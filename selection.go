@@ -30,9 +30,12 @@ func (d *Document) Tool() Tool {
 	return d.tool
 }
 
-// SetTool sets what dragging on the pages does: pan them ([ToolNone], the
-// default) or select text ([ToolSelect]). The toolbar has a button for it.
-// Switching clears the text selection.
+// SetTool sets what dragging and tapping on the pages do: pan them
+// ([ToolNone], the default), select text ([ToolSelect]; the toolbar has a
+// button for it), or make annotations ([ToolHighlight], [ToolNote],
+// [ToolInk], ...): they are written to the document at once, Undo and Redo
+// take them back, Save writes the document with them. Switching clears
+// the text selection.
 func (d *Document) SetTool(t Tool) {
 	if t == d.tool {
 		return
@@ -179,7 +182,7 @@ func (d *Document) livePages() []int {
 // loadTexts reads the text of those of pages not read yet in the
 // background, while a tool needs it.
 func (d *Document) loadTexts(pages []int) {
-	if d.tool == ToolNone {
+	if !d.tool.selectsText() {
 		return
 	}
 	d.mutex.Lock()
@@ -234,7 +237,7 @@ func (d *Document) cursor(pos fyne.Position) desktop.Cursor {
 	if _, ok := d.linkAt(pos); ok {
 		return desktop.PointerCursor
 	}
-	if d.tool == ToolSelect && d.overText(pos) {
+	if d.tool.selectsText() && d.overText(pos) {
 		return desktop.TextCursor
 	}
 	return desktop.DefaultCursor

@@ -95,6 +95,16 @@ type (
 		// password opens the PDF or it returns ok false. If nil,
 		// LoadFromMemory asks with a dialog on the widget's window.
 		PasswordCallback func(retry bool) (password string, ok bool)
+		// OnChanged is called when the annotations were changed, a change
+		// was undone or redone, or the document was saved: when
+		// Modified, CanUndo or CanRedo may say something else.
+		OnChanged func()
+		// Author is the author of the annotations made with the tools.
+		Author string
+		// AnnotationColor is the colour of the annotations made with the
+		// tools; if nil, yellow for highlights and notes, red for
+		// drawings and shapes, black for underlines and strikethroughs.
+		AnnotationColor color.Color
 		// OnLoaded is called on the main goroutine when a PDF has been
 		// loaded: by LoadFromMemory, or once the password asked for by
 		// its dialog has been entered.
@@ -110,7 +120,9 @@ type (
 		HighlightColor, CurrentHighlightColor color.Color
 
 		thumbnails []*Thumbnail
-		area       *pageArea
+		// thumbnailDPIs is the resolution of each thumbnail.
+		thumbnailDPIs []float64
+		area          *pageArea
 
 		base               *fyne.Container
 		thumbnailContainer *fyne.Container
@@ -164,11 +176,19 @@ type (
 		// for none.
 		tool      Tool
 		selection *textSelection
+		// sketch is what a drag draws with a drawing tool, nil while none
+		// does; textDialog asks for the text of a note or a text box,
+		// textEntry is its entry.
+		sketch     *sketch
+		textDialog *dialog.FormDialog
+		textEntry  *widget.Entry
 		// outline is the outline panel, comments the comments panel.
 		outline  *outlinePanel
 		comments *commentsPanel
 		// openURL opens the URIs of outline entries; replaced in tests.
 		openURL func(*url.URL) error
+		// history are the versions of the file, one per change.
+		history editHistory
 		// search is the state of the search, see Document.Search.
 		search documentSearch
 		// modifiers returns the key modifiers held; replaced in tests.
@@ -459,6 +479,7 @@ func (d *Document) LoadFromMemory(contents []byte) error {
 
 // loaded shows src and tells OnLoaded.
 func (d *Document) loaded(src *Source) {
+	d.history.reset(src.contents, src.password)
 	d.load(src)
 	if d.OnLoaded != nil {
 		d.OnLoaded()
@@ -647,6 +668,35 @@ func (d *Document) updateViewModeButton() {
 	d.viewModeButton.Refresh()
 }
 
+// renderThumbnails renders the thumbnail of page, or of all pages for -1,
+// in the background.
+func (d *Document) renderThumbnails(src *Source, ctx context.Context, page int) {
+	thumbnails, dpis := d.thumbnails, d.thumbnailDPIs
+	d.pending.Add(1)
+	go func() {
+		defer d.pending.Done()
+		for i, thumbnail := range thumbnails {
+			if page >= 0 && i != page {
+				continue
+			}
+			img, err := src.RenderPageContext(ctx, i, dpis[i])
+			if ctx.Err() != nil {
+				return
+			}
+			d.runOnMain(func() {
+				if err != nil {
+					d.reportError(i, err)
+					return
+				}
+				thumbnail.SetImage(img)
+				// The thumbnail stands in for the page until it is
+				// rendered.
+				d.showImages()
+			})
+		}
+	}()
+}
+
 func (d *Document) load(src *Source) {
 	d.resetSearch()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -719,27 +769,8 @@ func (d *Document) load(src *Source) {
 	d.comments.reset()
 	d.loadAnnotations(src, ctx, numPages)
 
-	thumbnails := d.thumbnails
-	d.pending.Add(1)
-	go func() {
-		defer d.pending.Done()
-		for i, thumbnail := range thumbnails {
-			img, err := src.RenderPageContext(ctx, i, dpis[i])
-			if ctx.Err() != nil {
-				return
-			}
-			d.runOnMain(func() {
-				if err != nil {
-					d.reportError(i, err)
-					return
-				}
-				thumbnail.SetImage(img)
-				// The thumbnail stands in for the page until it is
-				// rendered.
-				d.showImages()
-			})
-		}
-	}()
+	d.thumbnailDPIs = dpis
+	d.renderThumbnails(src, ctx, -1)
 
 	d.clearViews()
 	d.fitHorizontal, d.fitVertical = true, true
