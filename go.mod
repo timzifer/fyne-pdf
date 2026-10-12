@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	fyne.io/fyne/v2 v2.8.1
 	github.com/cockroachdb/errors v1.14.0
-	github.com/timzifer/cera v0.8.0
+	github.com/timzifer/cera v0.9.0
 	github.com/timzifer/fyne_lucide v1.2.0
 	github.com/timzifer/fyne_tabler v1.2.0
 	golang.org/x/sys v0.48.0
@@ -52,3 +52,5 @@ require (
 	golang.org/x/text v0.42.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/ajroetker/go-highway => github.com/timzifer/go-highway v0.0.13-timzifer.1
