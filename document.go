@@ -98,6 +98,11 @@ type (
 		// loaded: by LoadFromMemory, or once the password asked for by
 		// its dialog has been entered.
 		OnLoaded func()
+		// OnLinkTapped, if set, is called when a link on a page is
+		// tapped; returning true means it handled the link. Otherwise the
+		// widget goes to the link's destination, or opens its URI in the
+		// browser; it does not follow links to other files.
+		OnLinkTapped func(Link) bool
 		// HighlightColor fills the search results on the pages,
 		// CurrentHighlightColor the current one. If nil, translucent
 		// yellow and orange are used.
@@ -186,6 +191,9 @@ type (
 		renderedPixels int
 		useClock       uint64
 		failed         map[int]float64
+		// links are the links by page, nil while being read; a page
+		// missing has not been asked for.
+		links map[int][]Link
 		// renderOptions are those of the main view; images rendered with
 		// others are shown until they are rendered again.
 		renderOptions RenderOptions
@@ -217,6 +225,7 @@ func NewDocument() *Document {
 		views:              map[int]*Page{},
 		rendered:           map[int]*renderedPage{},
 		failed:             map[int]float64{},
+		links:              map[int][]Link{},
 	}
 	_ = d.zoom.Set(1)
 
@@ -632,6 +641,7 @@ func (d *Document) load(src *Source) {
 	d.jobs, d.rendering, d.inflightCancel = nil, false, nil
 	d.rendered, d.renderedPixels = map[int]*renderedPage{}, 0
 	d.failed = map[int]float64{}
+	d.links = map[int][]Link{}
 	d.mutex.Unlock()
 
 	scale := d.canvasScale()

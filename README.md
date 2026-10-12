@@ -37,6 +37,10 @@ no cgo PDF library, no external binaries.
   goes to the entry's destination, the entry of the current page is marked.
   `Outline()` and `GoTo(Destination)` (XYZ, Fit, FitH, FitV, FitR) for
   your own navigation
+- Links: a tap on a link goes to its destination in the document or opens
+  its URI in the browser, the pointer turns into a hand over it;
+  `OnLinkTapped` to handle links yourself (links to other files are not
+  followed). `Source.Links(page)` for the links of a page
 - Encrypted PDFs: `LoadFromMemory` asks for the password with a dialog (or
   `PasswordCallback`), `OnLoaded` reports the loaded PDF; `Encrypted()` and
   `Permissions()` (`PermPrint`, `PermCopy`, …) tell what the author allows —
