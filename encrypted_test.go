@@ -42,6 +42,12 @@ func rc4Rounds(key, b []byte) []byte {
 // handler, revision 3): user and owner password, and the permissions perm
 // as /P (-4 is everything).
 func encryptedPDF(user, owner string, perm int32) []byte {
+	return encryptedContentPDF("1 0 0 rg 100 100 200 200 re f", user, owner, perm)
+}
+
+// encryptedContentPDF is encryptedPDF with the content stream content,
+// which can use the font /F1 (Helvetica).
+func encryptedContentPDF(content, user, owner string, perm int32) []byte {
 	padded := func(pw string) []byte { return append([]byte(pw), passwordPad...)[:32] }
 	id := []byte("0123456789abcdef")
 
@@ -69,15 +75,14 @@ func encryptedPDF(user, owner string, perm int32) []byte {
 	u := append(rc4Rounds(key, s[:]), make([]byte, 16)...)
 
 	// Algorithm 1: the content stream, object 4.
-	content := []byte("1 0 0 rg 100 100 200 200 re f")
 	objKey := md5.Sum(append(slices.Clone(key), 4, 0, 0, 0, 0))
-	content = rc4Bytes(objKey[:], content)
+	stream := rc4Bytes(objKey[:], []byte(content))
 
 	return buildPDF([]string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
-		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R " + helvetica + " >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(stream), stream),
 		fmt.Sprintf("<< /Filter /Standard /V 2 /R 3 /Length 128 /P %d /O <%x> /U <%x> >>", perm, o, u),
 	}, fmt.Sprintf("/Encrypt 5 0 R /ID [<%x> <%x>]", id, id))
 }

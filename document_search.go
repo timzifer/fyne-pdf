@@ -282,6 +282,13 @@ func (d *Document) highlightsOf(page int) []Highlight {
 	s := &d.search
 	from := sort.Search(len(s.results), func(i int) bool { return s.results[i].Page >= page })
 	highlights := d.selectionHighlights(page)
+	for _, r := range d.selectionRects(page) {
+		highlights = append(highlights, Highlight{
+			Position: fyne.NewPos(float32(r.X0*unitsPerPoint), float32(r.Y0*unitsPerPoint)),
+			Size:     fyne.NewSize(float32((r.X1-r.X0)*unitsPerPoint), float32((r.Y1-r.Y0)*unitsPerPoint)),
+			Color:    selectionColor,
+		})
+	}
 	for i := from; i < len(s.results) && s.results[i].Page == page; i++ {
 		c := d.HighlightColor
 		if c == nil {

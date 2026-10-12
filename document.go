@@ -20,6 +20,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/cockroachdb/errors"
+	"github.com/timzifer/cera"
 	"github.com/timzifer/fyne_lucide"
 	"github.com/timzifer/fyne_tabler"
 )
@@ -94,6 +95,19 @@ type (
 		// password opens the PDF or it returns ok false. If nil,
 		// LoadFromMemory asks with a dialog on the widget's window.
 		PasswordCallback func(retry bool) (password string, ok bool)
+		// OnChanged is called when the annotations were changed, a change
+		// was undone or redone, or the document was saved: when
+		// Modified, CanUndo or CanRedo may say something else.
+		OnChanged func()
+		// OnToolChanged is called when the tool changes, also by the
+		// toolbar's button for selecting text.
+		OnToolChanged func()
+		// Author is the author of the annotations made with the tools.
+		Author string
+		// AnnotationColor is the colour of the annotations made with the
+		// tools; if nil, yellow for highlights and notes, red for
+		// drawings and shapes, black for underlines and strikethroughs.
+		AnnotationColor color.Color
 		// OnLoaded is called on the main goroutine when a PDF has been
 		// loaded: by LoadFromMemory, or once the password asked for by
 		// its dialog has been entered.
@@ -109,7 +123,9 @@ type (
 		HighlightColor, CurrentHighlightColor color.Color
 
 		thumbnails []*Thumbnail
-		area       *pageArea
+		// thumbnailDPIs is the resolution of each thumbnail.
+		thumbnailDPIs []float64
+		area          *pageArea
 
 		base               *fyne.Container
 		thumbnailContainer *fyne.Container
@@ -123,6 +139,7 @@ type (
 		outlineButton          *widget.Button
 		commentsButton         *widget.Button
 		viewModeButton         *widget.Button
+		toolButton             *widget.Button
 		zoomInButton           *widget.Button
 		zoomOutButton          *widget.Button
 		saveButton             *widget.Button
@@ -158,11 +175,24 @@ type (
 		// passwordEntry is its entry; nil if no dialog is shown.
 		passwordDialog *dialog.FormDialog
 		passwordEntry  *widget.Entry
+		// tool is what dragging does; selection is the selected text, nil
+		// for none.
+		tool      Tool
+		selection *textSelection
+		// sketch is what a drag draws with a drawing tool, nil while none
+		// does; textDialog asks for the text of a note or a text box,
+		// textEntry is its entry.
+		sketch     *sketch
+		moving     *annotationMove
+		textDialog *dialog.FormDialog
+		textEntry  *widget.Entry
 		// outline is the outline panel, comments the comments panel.
 		outline  *outlinePanel
 		comments *commentsPanel
 		// openURL opens the URIs of outline entries; replaced in tests.
 		openURL func(*url.URL) error
+		// history are the versions of the file, one per change.
+		history editHistory
 		// search is the state of the search, see Document.Search.
 		search documentSearch
 		// modifiers returns the key modifiers held; replaced in tests.
@@ -194,8 +224,10 @@ type (
 		useClock       uint64
 		failed         map[int]float64
 		// links are the links by page, nil while being read; a page
-		// missing has not been asked for.
+		// missing has not been asked for. texts are the texts of the
+		// pages alike, read while a tool needs them.
 		links map[int][]Link
+		texts map[int]*cera.PageText
 		// renderOptions are those of the main view; images rendered with
 		// others are shown until they are rendered again.
 		renderOptions RenderOptions
@@ -228,6 +260,7 @@ func NewDocument() *Document {
 		rendered:           map[int]*renderedPage{},
 		failed:             map[int]float64{},
 		links:              map[int][]Link{},
+		texts:              map[int]*cera.PageText{},
 	}
 	_ = d.zoom.Set(1)
 
@@ -305,6 +338,16 @@ func NewDocument() *Document {
 	d.viewModeButton.Importance = widget.LowImportance
 	d.updateViewModeButton()
 
+	d.toolButton = widget.NewButton("", func() {
+		if d.tool == ToolSelect {
+			d.SetTool(ToolNone)
+		} else {
+			d.SetTool(ToolSelect)
+		}
+	})
+	d.toolButton.Icon = fyne_lucide.Icon(fyne_lucide.IconTextCursor)
+	d.toolButton.Importance = widget.LowImportance
+
 	d.saveButton = widget.NewButton("", nil)
 	d.saveButton.Icon = fyne_lucide.Icon(fyne_lucide.IconSave)
 	d.saveButton.Importance = widget.LowImportance
@@ -339,6 +382,7 @@ func NewDocument() *Document {
 	d.toolbar.Add(fitVerticalButton)
 	d.toolbar.Add(fitHorizontalButton)
 	d.toolbar.Add(d.viewModeButton)
+	d.toolbar.Add(d.toolButton)
 	d.toolbar.Add(d.commentsButton)
 	d.toolbar.Add(d.saveButton)
 
@@ -439,6 +483,7 @@ func (d *Document) LoadFromMemory(contents []byte) error {
 
 // loaded shows src and tells OnLoaded.
 func (d *Document) loaded(src *Source) {
+	d.history.reset(src.contents, src.password)
 	d.load(src)
 	if d.OnLoaded != nil {
 		d.OnLoaded()
@@ -627,6 +672,35 @@ func (d *Document) updateViewModeButton() {
 	d.viewModeButton.Refresh()
 }
 
+// renderThumbnails renders the thumbnail of page, or of all pages for -1,
+// in the background.
+func (d *Document) renderThumbnails(src *Source, ctx context.Context, page int) {
+	thumbnails, dpis := d.thumbnails, d.thumbnailDPIs
+	d.pending.Add(1)
+	go func() {
+		defer d.pending.Done()
+		for i, thumbnail := range thumbnails {
+			if page >= 0 && i != page {
+				continue
+			}
+			img, err := src.RenderPageContext(ctx, i, dpis[i])
+			if ctx.Err() != nil {
+				return
+			}
+			d.runOnMain(func() {
+				if err != nil {
+					d.reportError(i, err)
+					return
+				}
+				thumbnail.SetImage(img)
+				// The thumbnail stands in for the page until it is
+				// rendered.
+				d.showImages()
+			})
+		}
+	}()
+}
+
 func (d *Document) load(src *Source) {
 	d.resetSearch()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -653,7 +727,9 @@ func (d *Document) load(src *Source) {
 	d.rendered, d.renderedPixels = map[int]*renderedPage{}, 0
 	d.failed = map[int]float64{}
 	d.links = map[int][]Link{}
+	d.texts = map[int]*cera.PageText{}
 	d.mutex.Unlock()
+	d.selection = nil
 
 	scale := d.canvasScale()
 
@@ -697,27 +773,8 @@ func (d *Document) load(src *Source) {
 	d.comments.reset()
 	d.loadAnnotations(src, ctx, numPages)
 
-	thumbnails := d.thumbnails
-	d.pending.Add(1)
-	go func() {
-		defer d.pending.Done()
-		for i, thumbnail := range thumbnails {
-			img, err := src.RenderPageContext(ctx, i, dpis[i])
-			if ctx.Err() != nil {
-				return
-			}
-			d.runOnMain(func() {
-				if err != nil {
-					d.reportError(i, err)
-					return
-				}
-				thumbnail.SetImage(img)
-				// The thumbnail stands in for the page until it is
-				// rendered.
-				d.showImages()
-			})
-		}
-	}()
+	d.thumbnailDPIs = dpis
+	d.renderThumbnails(src, ctx, -1)
 
 	d.clearViews()
 	d.fitHorizontal, d.fitVertical = true, true

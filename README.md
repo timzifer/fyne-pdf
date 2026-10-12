@@ -47,6 +47,22 @@ no cgo PDF library, no external binaries.
   annotation and marks it; a tap on an annotation on the page selects its
   row and shows the thread beside it. `Annotations(page)`,
   `ShowAnnotation(a)`; `Source.Annotations(page)` without the widget
+- Text selection: `SetTool(pdf.ToolSelect)` (or the text button in the
+  toolbar) selects text by dragging, a double click a word, Ctrl+A the
+  page; Ctrl+C or `CopySelection` copies it unless the document forbids it
+  (`PermCopy`); `SelectedText()`
+- Annotation tools: `SetTool(pdf.ToolHighlight)` (or `ToolUnderline`,
+  `ToolStrikeOut`, `ToolNote`, `ToolFreeText`, `ToolInk`, `ToolRect`,
+  `ToolEllipse`, `ToolLine`) marks text, places notes and text boxes, draws;
+  Delete removes the selected annotation. Every change is written to the
+  document at once as an incremental update, drawn by cera as it will be
+  saved; `Undo`/`Redo` (Ctrl+Z, Ctrl+Y), `Modified()`, `OnChanged`,
+  `Save(w)` — signed and encrypted documents stay signed and encrypted.
+  `Author`, `AnnotationColor`, `OnToolChanged`
+- Editing annotations: the popup of the selected annotation changes its
+  text and its colour or deletes it; a drag with `ToolNone` moves it (text
+  markup stays with its text). `SetAnnotationContents`,
+  `SetAnnotationColor`, `MoveAnnotation`
 - Encrypted PDFs: `LoadFromMemory` asks for the password with a dialog (or
   `PasswordCallback`), `OnLoaded` reports the loaded PDF; `Encrypted()` and
   `Permissions()` (`PermPrint`, `PermCopy`, …) tell what the author allows —

@@ -75,6 +75,12 @@ func (r *pageAreaRenderer) Refresh() {
 	for _, page := range pages {
 		r.objects = append(r.objects, d.views[page])
 	}
+	if d.sketch != nil {
+		r.objects = append(r.objects, d.sketch.objects...)
+	}
+	if d.moving != nil && d.moving.outline != nil {
+		r.objects = append(r.objects, d.moving.outline)
+	}
 	r.Layout(r.area.Size())
 }
 
@@ -232,6 +238,7 @@ func (d *Document) updateViews() {
 		view.SetHighlights(d.highlightsOf(page))
 	}
 	d.loadLinks(live)
+	d.loadTexts(live)
 	d.showImages()
 	d.area.Refresh()
 }

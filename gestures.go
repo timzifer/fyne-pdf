@@ -50,8 +50,11 @@ type (
 		widget.BaseWidget
 
 		doc *Document
-		// overLink is set while the pointer is over a link.
-		overLink bool
+		// cursor is the pointer for what is under it.
+		cursor desktop.Cursor
+		// selecting is set while a drag selects text, dragging while any
+		// drag goes on.
+		selecting, dragging bool
 	}
 
 	// pageScroll is the main scroll view. It handles the wheel: Ctrl+wheel
@@ -150,19 +153,65 @@ func (a *pageScroll) Scrolled(ev *fyne.ScrollEvent) {
 	}
 }
 
-// Dragged pans the page.
+// Dragged pans the page, or moves the selected annotation when it starts
+// on it; with a tool, it selects text or draws.
 func (a *pageArea) Dragged(ev *fyne.DragEvent) {
 	d := a.doc
-	d.scrollTo(d.scrollContainer.Offset.Subtract(ev.Dragged))
+	switch {
+	case d.tool.selectsText():
+		if !a.selecting {
+			a.selecting = true
+			d.startSelection(ev.Position.Subtract(ev.Dragged))
+		}
+		d.extendSelection(ev.Position)
+	case d.tool.draws():
+		if d.sketch == nil {
+			d.startSketch(ev.Position.Subtract(ev.Dragged))
+		}
+		d.extendSketch(ev.Position)
+	default:
+		if !a.dragging && d.startMove(ev.Position.Subtract(ev.Dragged)) || d.moving != nil {
+			d.extendMove(ev.Position)
+			break
+		}
+		d.scrollTo(d.scrollContainer.Offset.Subtract(ev.Dragged))
+	}
+	a.dragging = true
 }
 
-func (a *pageArea) DragEnd() {}
+// DragEnd marks the selected text with a text markup tool, or adds what a
+// drawing tool drew.
+func (a *pageArea) DragEnd() {
+	a.dragging = false
+	d := a.doc
+	if d.moving != nil {
+		d.finishMove()
+	}
+	if a.selecting {
+		a.selecting = false
+		d.markSelection()
+	}
+	if d.sketch != nil {
+		d.finishSketch()
+	}
+}
 
 // Tapped follows a link. It focuses the view on touch devices; desktop
 // focuses on MouseDown.
 func (a *pageArea) Tapped(ev *fyne.PointEvent) {
 	a.focus()
 	d := a.doc
+	switch d.tool {
+	case ToolNote:
+		d.placeNote(ev.Position)
+		return
+	case ToolFreeText:
+		if page := d.layout.pageAt(ev.Position.Y, d.areaSize()); page >= 0 && d.layout.contains(page) {
+			x, y := d.pagePoint(page, ev.Position)
+			d.placeFreeText(page, Rect{X0: x, Y0: y, X1: x, Y1: y})
+		}
+		return
+	}
 	if l, ok := d.linkAt(ev.Position); ok {
 		d.followLink(l)
 		return
@@ -172,12 +221,18 @@ func (a *pageArea) Tapped(ev *fyne.PointEvent) {
 		return
 	}
 	d.comments.clearSelection()
+	d.ClearSelection()
 }
 
 // DoubleTapped switches between the fitted page and 100 %, zooming in at
-// the tapped point.
+// the tapped point; with ToolSelect, it selects the word.
 func (a *pageArea) DoubleTapped(ev *fyne.PointEvent) {
 	d := a.doc
+	if d.tool.selectsText() {
+		d.selectWord(ev.Position)
+		d.markSelection()
+		return
+	}
 	if d.fitHorizontal && d.fitVertical {
 		d.zoomAt(1, ev.Position.Subtract(d.scrollContainer.Offset))
 		return
@@ -221,6 +276,11 @@ func (a *pageArea) TypedKey(ev *fyne.KeyEvent) {
 		} else {
 			d.scrollScreen(1)
 		}
+	case fyne.KeyEscape:
+		d.ClearSelection()
+		d.comments.clearSelection()
+	case fyne.KeyDelete:
+		d.deleteSelected()
 	case fyne.KeyF3:
 		if d.modifiers()&fyne.KeyModifierShift != 0 {
 			d.PreviousSearchResult()
@@ -250,8 +310,26 @@ func (a *pageArea) TypedKey(ev *fyne.KeyEvent) {
 	}
 }
 
-// TypedShortcut zooms with Ctrl (Cmd on macOS) and +, - or 0.
+// TypedShortcut zooms with Ctrl (Cmd on macOS) and +, - or 0; Ctrl+C
+// copies the selected text, Ctrl+A selects the text of the page with
+// ToolSelect.
 func (a *pageArea) TypedShortcut(s fyne.Shortcut) {
+	switch s.(type) {
+	case *fyne.ShortcutCopy:
+		a.doc.CopySelection()
+		return
+	case *fyne.ShortcutUndo:
+		a.doc.Undo()
+		return
+	case *fyne.ShortcutRedo:
+		a.doc.Redo()
+		return
+	case *fyne.ShortcutSelectAll:
+		if a.doc.tool.selectsText() {
+			a.doc.selectPage()
+		}
+		return
+	}
 	cs, ok := s.(*desktop.CustomShortcut)
 	if !ok || cs.Modifier&^fyne.KeyModifierShift != fyne.KeyModifierShortcutDefault {
 		return
@@ -266,6 +344,14 @@ func (a *pageArea) TypedShortcut(s fyne.Shortcut) {
 		d.zoomAt(d.scale/zoomKeyFactor, anchor)
 	case fyne.Key0:
 		d.zoomAt(1, anchor)
+	case fyne.KeyY:
+		d.Redo()
+	case fyne.KeyZ:
+		if cs.Modifier&fyne.KeyModifierShift != 0 {
+			d.Redo()
+		} else {
+			d.Undo()
+		}
 	}
 }
 
