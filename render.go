@@ -36,6 +36,9 @@ type (
 		img image.Image
 		dpi float64
 		opt RenderOptions
+		// stale is set for the image of a page that changed since; it is
+		// shown until the page is rendered again.
+		stale bool
 		// used orders the images by when they were last wanted.
 		used uint64
 	}
@@ -217,7 +220,7 @@ func (d *Document) nextJobLocked(ctx context.Context) (renderJob, bool) {
 		return renderJob{}, false
 	}
 	for _, job := range d.jobs {
-		if r, ok := d.rendered[job.page]; ok && adequate(r.dpi, job.dpi) && r.opt == d.renderOptions {
+		if r, ok := d.rendered[job.page]; ok && adequate(r.dpi, job.dpi) && r.opt == d.renderOptions && !r.stale {
 			continue
 		}
 		if dpi, ok := d.failed[job.page]; ok && adequate(dpi, job.dpi) {

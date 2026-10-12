@@ -51,6 +51,14 @@ no cgo PDF library, no external binaries.
   toolbar) selects text by dragging, a double click a word, Ctrl+A the
   page; Ctrl+C or `CopySelection` copies it unless the document forbids it
   (`PermCopy`); `SelectedText()`
+- Annotation tools: `SetTool(pdf.ToolHighlight)` (or `ToolUnderline`,
+  `ToolStrikeOut`, `ToolNote`, `ToolFreeText`, `ToolInk`, `ToolRect`,
+  `ToolEllipse`, `ToolLine`) marks text, places notes and text boxes, draws;
+  Delete removes the selected annotation. Every change is written to the
+  document at once as an incremental update, drawn by cera as it will be
+  saved; `Undo`/`Redo` (Ctrl+Z, Ctrl+Y), `Modified()`, `OnChanged`,
+  `Save(w)` — signed and encrypted documents stay signed and encrypted.
+  `Author`, `AnnotationColor`
 - Encrypted PDFs: `LoadFromMemory` asks for the password with a dialog (or
   `PasswordCallback`), `OnLoaded` reports the loaded PDF; `Encrypted()` and
   `Permissions()` (`PermPrint`, `PermCopy`, …) tell what the author allows —
