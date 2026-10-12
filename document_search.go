@@ -281,7 +281,7 @@ func (d *Document) updateHighlights() {
 func (d *Document) highlightsOf(page int) []Highlight {
 	s := &d.search
 	from := sort.Search(len(s.results), func(i int) bool { return s.results[i].Page >= page })
-	var highlights []Highlight
+	highlights := d.selectionHighlights(page)
 	for i := from; i < len(s.results) && s.results[i].Page == page; i++ {
 		c := d.HighlightColor
 		if c == nil {

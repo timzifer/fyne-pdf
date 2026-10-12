@@ -41,6 +41,12 @@ no cgo PDF library, no external binaries.
   its URI in the browser, the pointer turns into a hand over it;
   `OnLinkTapped` to handle links yourself (links to other files are not
   followed). `Source.Links(page)` for the links of a page
+- Comments: a side panel lists the annotations of the document — author,
+  date, text, replies indented, review state as a badge (`ShowComments`,
+  toolbar button once there are any). A tap on a row goes to the
+  annotation and marks it; a tap on an annotation on the page selects its
+  row and shows the thread beside it. `Annotations(page)`,
+  `ShowAnnotation(a)`; `Source.Annotations(page)` without the widget
 - Encrypted PDFs: `LoadFromMemory` asks for the password with a dialog (or
   `PasswordCallback`), `OnLoaded` reports the loaded PDF; `Encrypted()` and
   `Permissions()` (`PermPrint`, `PermCopy`, …) tell what the author allows —
