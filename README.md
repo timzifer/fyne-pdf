@@ -32,6 +32,11 @@ no cgo PDF library, no external binaries.
   Shift+F3), `ShowSearchResult(i)` and `SearchResults()` for a result list
 - Link borders: `SetShowLinkBorders(true)` draws the boxes hyperref puts
   around links, as Acrobat and Firefox do (off by default, never on thumbnails)
+- Encrypted PDFs: `LoadFromMemory` asks for the password with a dialog (or
+  `PasswordCallback`), `OnLoaded` reports the loaded PDF; `Encrypted()` and
+  `Permissions()` (`PermPrint`, `PermCopy`, …) tell what the author allows —
+  enforcing it is up to the application. `OpenSourceWithPassword`,
+  `ErrPassword` and `ErrUnsupportedEncryption` for use without the widget
 - Optional save button via `SaveCallback`, render errors via `OnError`
 - `Source`: goroutine-safe access to an opened PDF — page count, page bounds,
   rendering at arbitrary DPI (`RenderPageOptions` for link borders), document metadata, page text and search
@@ -110,7 +115,9 @@ and a "Save as PDF" button.
 
 Edit > Find (Ctrl+F) opens a search bar with options and a result count;
 the results are listed beside the pages ([search.go](examples/viewer/search.go)).
-View > Link Borders switches the link borders on and off.
+View > Link Borders switches the link borders on and off. An encrypted PDF
+asks for its password; File > Print is disabled when it does not allow
+printing.
 
 ### Search
 

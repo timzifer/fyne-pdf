@@ -15,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/cockroachdb/errors"
@@ -86,6 +87,16 @@ type (
 		// changes: results found, the current result, the search done or
 		// cleared. See [Document.Search].
 		OnSearchChanged func()
+		// PasswordCallback, if set, is asked for the password of an
+		// encrypted PDF that needs one: retry is false the first time and
+		// true after a wrong password. It is called again until the
+		// password opens the PDF or it returns ok false. If nil,
+		// LoadFromMemory asks with a dialog on the widget's window.
+		PasswordCallback func(retry bool) (password string, ok bool)
+		// OnLoaded is called on the main goroutine when a PDF has been
+		// loaded: by LoadFromMemory, or once the password asked for by
+		// its dialog has been entered.
+		OnLoaded func()
 		// HighlightColor fills the search results on the pages,
 		// CurrentHighlightColor the current one. If nil, translucent
 		// yellow and orange are used.
@@ -132,6 +143,13 @@ type (
 		// fitScale is the zoom the last fit set.
 		fitHorizontal, fitVertical bool
 		fitScale                   float64
+		// loads counts the calls of LoadFromMemory and Close; a password
+		// dialog answered after another one is ignored.
+		loads int
+		// passwordDialog asks for the password of the PDF being loaded,
+		// passwordEntry is its entry; nil if no dialog is shown.
+		passwordDialog *dialog.FormDialog
+		passwordEntry  *widget.Entry
 		// search is the state of the search, see Document.Search.
 		search documentSearch
 		// modifiers returns the key modifiers held; replaced in tests.
@@ -330,6 +348,7 @@ func (d *Document) zoomChanged() {
 // Close releases the loaded PDF and stops pending renders. Pages already
 // shown stay visible.
 func (d *Document) Close() error {
+	d.cancelPassword()
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	return d.closeLocked()
@@ -355,13 +374,143 @@ func (d *Document) closeLocked() error {
 
 // LoadFromMemory opens the PDF in contents and shows its first page. A
 // previously loaded PDF is closed. Pages are rendered in the background.
+//
+// An encrypted PDF that needs a password is opened with the one
+// [Document.PasswordCallback] returns; if it gives up, the error wraps
+// [ErrPassword]. Without a callback, LoadFromMemory shows a password dialog
+// on the widget's window and returns nil at once: the PDF is loaded, and
+// [Document.OnLoaded] called, when the right password is entered; the
+// dialog asks again after a wrong one, and cancelling it leaves the
+// previous PDF. A widget not on a window returns an error wrapping
+// [ErrPassword].
 func (d *Document) LoadFromMemory(contents []byte) error {
+	d.cancelPassword()
 	src, err := OpenSource(contents)
+	if errors.Is(err, ErrPassword) {
+		if d.PasswordCallback != nil {
+			src, err = d.askPassword(contents)
+		} else if w := d.window(); w != nil {
+			d.showPasswordDialog(w, contents, d.loads, false)
+			return nil
+		}
+	}
 	if err != nil {
 		return errors.Wrap(err, "could not open pdf from memory")
 	}
-	d.load(src)
+	d.loaded(src)
 	return nil
+}
+
+// loaded shows src and tells OnLoaded.
+func (d *Document) loaded(src *Source) {
+	d.load(src)
+	if d.OnLoaded != nil {
+		d.OnLoaded()
+	}
+}
+
+// askPassword opens contents with the passwords PasswordCallback returns.
+func (d *Document) askPassword(contents []byte) (*Source, error) {
+	for retry := false; ; retry = true {
+		password, ok := d.PasswordCallback(retry)
+		if !ok {
+			return nil, errors.Wrap(ErrPassword, "no password given")
+		}
+		src, err := OpenSourceWithPassword(contents, password)
+		if !errors.Is(err, ErrPassword) {
+			return src, err
+		}
+	}
+}
+
+// showPasswordDialog asks on w for the password of contents, the PDF of
+// load number load; retry says that the last one was wrong.
+func (d *Document) showPasswordDialog(w fyne.Window, contents []byte, load int, retry bool) {
+	message := "The document is protected by a password."
+	if retry {
+		message = "The password is wrong. Try again."
+	}
+	entry := widget.NewPasswordEntry()
+	item := widget.NewFormItem("Password", entry)
+	item.HintText = message
+	items := []*widget.FormItem{item}
+	var dlg *dialog.FormDialog
+	dlg = dialog.NewForm("Password", "Open", "Cancel", items, func(ok bool) {
+		if load != d.loads || d.passwordDialog != dlg {
+			return
+		}
+		d.passwordDialog, d.passwordEntry = nil, nil
+		if !ok {
+			return
+		}
+		src, err := OpenSourceWithPassword(contents, entry.Text)
+		switch {
+		case errors.Is(err, ErrPassword):
+			d.showPasswordDialog(w, contents, load, true)
+		case err != nil:
+			dialog.ShowError(err, w)
+		default:
+			d.loaded(src)
+		}
+	}, w)
+	entry.OnSubmitted = func(string) { dlg.Submit() }
+	d.passwordDialog, d.passwordEntry = dlg, entry
+	dlg.Show()
+	w.Canvas().Focus(entry)
+}
+
+// cancelPassword closes a password dialog shown for an earlier load.
+func (d *Document) cancelPassword() {
+	d.loads++
+	if dlg := d.passwordDialog; dlg != nil {
+		d.passwordDialog, d.passwordEntry = nil, nil
+		dlg.Hide()
+	}
+}
+
+// window returns the window showing the widget, or nil.
+func (d *Document) window() fyne.Window {
+	drv := fyne.CurrentApp().Driver()
+	c := drv.CanvasForObject(d)
+	if c == nil {
+		return nil
+	}
+	for _, w := range drv.AllWindows() {
+		if w.Canvas() == c {
+			return w
+		}
+	}
+	return nil
+}
+
+// loadedSource returns the loaded PDF, or nil.
+func (d *Document) loadedSource() *Source {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	return d.source
+}
+
+// Metadata returns the metadata of the loaded PDF, see [Source.Metadata].
+func (d *Document) Metadata() Metadata {
+	if src := d.loadedSource(); src != nil {
+		return src.Metadata()
+	}
+	return Metadata{}
+}
+
+// Encrypted reports whether the loaded PDF is encrypted.
+func (d *Document) Encrypted() bool {
+	src := d.loadedSource()
+	return src != nil && src.Encrypted()
+}
+
+// Permissions returns what the loaded PDF allows, see
+// [Source.Permissions]; 0 if none is loaded.
+func (d *Document) Permissions() Permissions {
+	if src := d.loadedSource(); src != nil {
+		return src.Permissions()
+	}
+	return 0
 }
 
 // PageCount returns the number of pages of the loaded PDF.
