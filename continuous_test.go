@@ -455,11 +455,11 @@ func TestRenderCacheEvictsLeastRecentlyUsed(t *testing.T) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	d.jobs = []renderJob{{page: 3, dpi: 1}}
-	d.storeLocked(1, img, 1)
-	d.storeLocked(2, img, 1)
-	d.storeLocked(3, img, 1)
+	d.storeLocked(1, img, 1, RenderOptions{})
+	d.storeLocked(2, img, 1, RenderOptions{})
+	d.storeLocked(3, img, 1, RenderOptions{})
 	// Over budget: page 1 is the oldest not wanted.
-	d.storeLocked(4, img, 1)
+	d.storeLocked(4, img, 1, RenderOptions{})
 	if _, ok := d.rendered[1]; ok {
 		t.Error("page 1 kept, want it dropped first")
 	}
@@ -498,6 +498,15 @@ func TestRenderCancelledWhenNoLongerWanted(t *testing.T) {
 	cancelled = false
 	if d.startRenders(ctx, []renderJob{{page: 5, dpi: 200}}) || !cancelled {
 		t.Error("render at a resolution too low not cancelled")
+	}
+	// Rendered with options that changed since.
+	cancelled = false
+	d.mutex.Lock()
+	d.inflight = renderJob{page: 5, dpi: 100}
+	d.renderOptions.LinkBorders = true
+	d.mutex.Unlock()
+	if d.startRenders(ctx, []renderJob{{page: 5, dpi: 100}}) || !cancelled {
+		t.Error("render with old options not cancelled")
 	}
 }
 

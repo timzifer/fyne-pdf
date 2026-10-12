@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"image/color"
 	"maps"
 	"sync"
@@ -224,4 +225,48 @@ func mustOpen(t *testing.T, contents []byte) *Source {
 		t.Fatal(err)
 	}
 	return src
+}
+
+// linkPDF has a link with a blue border (as hyperref writes them) around
+// (400,500)-(500,550).
+func linkPDF() []byte {
+	return pagePDF("/Annots [<< /Type /Annot /Subtype /Link /Rect [400 500 500 550] " +
+		"/Border [0 0 1] /C [0 0 1] /A << /S /URI /URI (https://example.com) >> >>]")
+}
+
+// bluePixels counts the pixels of img that are mostly blue.
+func bluePixels(img image.Image) int {
+	n := 0
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, bl, _ := img.At(x, y).RGBA()
+			if bl>>8 > 200 && r>>8 < 100 && g>>8 < 100 {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+func TestRenderPageLinkBorders(t *testing.T) {
+	src, err := OpenSource(linkPDF())
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := src.RenderPage(0, 72)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := bluePixels(plain); n != 0 {
+		t.Errorf("without LinkBorders: %d blue pixels, want none", n)
+	}
+	bordered, err := src.RenderPageOptions(context.Background(), 0, 72, RenderOptions{LinkBorders: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The border is 1 pt wide around 100x50 pt.
+	if n := bluePixels(bordered); n < 250 {
+		t.Errorf("with LinkBorders: %d blue pixels, want the border", n)
+	}
 }

@@ -162,6 +162,9 @@ type (
 		renderedPixels int
 		useClock       uint64
 		failed         map[int]float64
+		// renderOptions are those of the main view; images rendered with
+		// others are shown until they are rendered again.
+		renderOptions RenderOptions
 	}
 )
 
@@ -402,6 +405,32 @@ func (d *Document) SetViewMode(mode ViewMode) {
 	d.navigating = true
 	d.viewChanged(0)
 	d.navigating = false
+}
+
+// ShowLinkBorders reports whether the main view draws the borders of links,
+// see [Document.SetShowLinkBorders].
+func (d *Document) ShowLinkBorders() bool {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	return d.renderOptions.LinkBorders
+}
+
+// SetShowLinkBorders sets whether the main view draws the borders link
+// annotations ask for, such as the coloured boxes around the links of LaTeX
+// documents made with hyperref (see [RenderOptions.LinkBorders]). Off by
+// default; thumbnails never show them. The pages in view are rendered
+// again, showing the old images until then.
+func (d *Document) SetShowLinkBorders(show bool) {
+	d.mutex.Lock()
+	if d.renderOptions.LinkBorders == show {
+		d.mutex.Unlock()
+		return
+	}
+	d.renderOptions.LinkBorders = show
+	// A page that failed may render with the other options.
+	clear(d.failed)
+	d.mutex.Unlock()
+	d.scheduleRender(0)
 }
 
 func (d *Document) updateViewModeButton() {

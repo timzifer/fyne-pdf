@@ -61,6 +61,20 @@ func (s *Source) RenderPage(page int, dpi float64) (image.Image, error) {
 // RenderPageContext is like [Source.RenderPage], but stops early and returns
 // ctx.Err() when ctx is cancelled.
 func (s *Source) RenderPageContext(ctx context.Context, page int, dpi float64) (image.Image, error) {
+	return s.RenderPageOptions(ctx, page, dpi, RenderOptions{})
+}
+
+// RenderOptions changes how [Source.RenderPageOptions] draws a page.
+type RenderOptions struct {
+	// LinkBorders draws the borders link annotations ask for (/Border,
+	// /BS with /C), such as the coloured boxes hyperref puts around the
+	// links of LaTeX documents. Acrobat and Firefox draw them, Chrome and
+	// Preview do not; off by default.
+	LinkBorders bool
+}
+
+// RenderPageOptions is like [Source.RenderPageContext], with options.
+func (s *Source) RenderPageOptions(ctx context.Context, page int, dpi float64, opt RenderOptions) (image.Image, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -85,9 +99,10 @@ func (s *Source) RenderPageContext(ctx context.Context, page int, dpi float64) (
 	scale := dpi / 72
 	dst := image.NewRGBA(p.Bounds(scale))
 	err = p.Render(ctx, dst, cera.RenderOptions{
-		Scale:      scale,
-		Background: paper,
-		Deadline:   time.Now().Add(renderTimeout),
+		Scale:       scale,
+		Background:  paper,
+		Deadline:    time.Now().Add(renderTimeout),
+		LinkBorders: opt.LinkBorders,
 	})
 	var panicErr *cera.PanicError
 	switch {

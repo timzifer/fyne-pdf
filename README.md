@@ -30,9 +30,11 @@ no cgo PDF library, no external binaries.
   words, ignore diacritics), highlights the results on the pages and scrolls
   to the current one; `NextSearchResult` / `PreviousSearchResult` (also F3 /
   Shift+F3), `ShowSearchResult(i)` and `SearchResults()` for a result list
+- Link borders: `SetShowLinkBorders(true)` draws the boxes hyperref puts
+  around links, as Acrobat and Firefox do (off by default, never on thumbnails)
 - Optional save button via `SaveCallback`, render errors via `OnError`
 - `Source`: goroutine-safe access to an opened PDF — page count, page bounds,
-  rendering at arbitrary DPI, document metadata, page text and search
+  rendering at arbitrary DPI (`RenderPageOptions` for link borders), document metadata, page text and search
 - `NewImageFromMemory`: render a single page to an `image.Image` without any UI
 - Render timeout per page (15 s); slow pages fall back to the partially drawn
   image instead of blocking the UI
@@ -108,6 +110,7 @@ and a "Save as PDF" button.
 
 Edit > Find (Ctrl+F) opens a search bar with options and a result count;
 the results are listed beside the pages ([search.go](examples/viewer/search.go)).
+View > Link Borders switches the link borders on and off.
 
 ### Search
 

@@ -26,12 +26,16 @@ type (
 	renderJob struct {
 		page int
 		dpi  float64
+		// opt is filled in when the job is taken: the options are the
+		// document's at that time, not a part of what is wanted.
+		opt RenderOptions
 	}
 
 	// renderedPage is a page image kept for the main view.
 	renderedPage struct {
 		img image.Image
 		dpi float64
+		opt RenderOptions
 		// used orders the images by when they were last wanted.
 		used uint64
 	}
@@ -79,7 +83,7 @@ func planRenders(visible, live []int, bounds []image.Rectangle, dpi float64) []r
 	var total float64
 	for _, page := range visible {
 		dpi := dpiFor(page)
-		jobs = append(jobs, renderJob{page, dpi})
+		jobs = append(jobs, renderJob{page: page, dpi: dpi})
 		total += pagePixels(points(page), dpi)
 	}
 	if total > renderBudgetPixels {
@@ -95,7 +99,7 @@ func planRenders(visible, live []int, bounds []image.Rectangle, dpi float64) []r
 		}
 		dpi := dpiFor(page)
 		if px := pagePixels(points(page), dpi); total+px <= renderBudgetPixels {
-			jobs = append(jobs, renderJob{page, dpi})
+			jobs = append(jobs, renderJob{page: page, dpi: dpi})
 			total += px
 		}
 	}
@@ -147,9 +151,9 @@ func (d *Document) startRenders(ctx context.Context, jobs []renderJob) bool {
 		d.rendering = true
 		return true
 	}
-	if d.inflightCancel != nil && !slices.ContainsFunc(jobs, func(j renderJob) bool {
+	if d.inflightCancel != nil && (d.inflight.opt != d.renderOptions || !slices.ContainsFunc(jobs, func(j renderJob) bool {
 		return j.page == d.inflight.page && adequate(d.inflight.dpi, j.dpi)
-	}) {
+	})) {
 		d.inflightCancel()
 	}
 	return false
@@ -172,7 +176,7 @@ func (d *Document) renderLoop(src *Source, ctx context.Context) {
 		d.inflight, d.inflightCancel = job, cancel
 		d.mutex.Unlock()
 
-		img, err := src.RenderPageContext(jobCtx, job.page, job.dpi)
+		img, err := src.RenderPageOptions(jobCtx, job.page, job.dpi, job.opt)
 
 		d.mutex.Lock()
 		cancelled := jobCtx.Err() != nil
@@ -190,7 +194,7 @@ func (d *Document) renderLoop(src *Source, ctx context.Context) {
 		if err != nil {
 			d.failed[job.page] = job.dpi
 		} else {
-			d.storeLocked(job.page, img, job.dpi)
+			d.storeLocked(job.page, img, job.dpi, job.opt)
 		}
 		d.mutex.Unlock()
 
@@ -213,12 +217,13 @@ func (d *Document) nextJobLocked(ctx context.Context) (renderJob, bool) {
 		return renderJob{}, false
 	}
 	for _, job := range d.jobs {
-		if r, ok := d.rendered[job.page]; ok && adequate(r.dpi, job.dpi) {
+		if r, ok := d.rendered[job.page]; ok && adequate(r.dpi, job.dpi) && r.opt == d.renderOptions {
 			continue
 		}
 		if dpi, ok := d.failed[job.page]; ok && adequate(dpi, job.dpi) {
 			continue
 		}
+		job.opt = d.renderOptions
 		return job, true
 	}
 	return renderJob{}, false
@@ -226,12 +231,12 @@ func (d *Document) nextJobLocked(ctx context.Context) (renderJob, bool) {
 
 // storeLocked keeps img for page and drops the least recently used images
 // of pages no longer wanted while the budget is exceeded.
-func (d *Document) storeLocked(page int, img image.Image, dpi float64) {
+func (d *Document) storeLocked(page int, img image.Image, dpi float64, opt RenderOptions) {
 	if old, ok := d.rendered[page]; ok {
 		d.renderedPixels -= imagePixels(old.img)
 	}
 	d.useClock++
-	d.rendered[page] = &renderedPage{img: img, dpi: dpi, used: d.useClock}
+	d.rendered[page] = &renderedPage{img: img, dpi: dpi, opt: opt, used: d.useClock}
 	d.renderedPixels += imagePixels(img)
 	delete(d.failed, page)
 
