@@ -10,6 +10,8 @@
 // pages and listed beside them; Enter and F3 go to the next result,
 // Shift+F3 to the previous one, a click in the list to that result;
 // -find searches for text right away.
+// An encrypted PDF asks for its password; without the right to print,
+// File > Print is disabled.
 // File > Print (Ctrl+P) prints it through goprint: -print-dialog native
 // (the default) shows the platform's print dialog, -print-dialog fyne the
 // one fyneprint draws with Fyne, with a preview and a "Save as PDF" button.
@@ -44,6 +46,11 @@ type viewer struct {
 	title string
 	// fynePrintDialog selects fyneprint's dialog over the platform's.
 	fynePrintDialog bool
+
+	mainMenu  *fyne.MainMenu
+	printItem *fyne.MenuItem
+	// onLoaded, if set, runs once the next PDF is loaded.
+	onLoaded func()
 }
 
 func main() {
@@ -77,8 +84,13 @@ func main() {
 	openItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyO, Modifier: fyne.KeyModifierShortcutDefault}
 	w.Canvas().AddShortcut(openItem.Shortcut, func(fyne.Shortcut) { v.showOpenDialog() })
 	printItem := fyne.NewMenuItem("Print…", v.showPrintDialog)
+	v.printItem = printItem
 	printItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyP, Modifier: fyne.KeyModifierShortcutDefault}
-	w.Canvas().AddShortcut(printItem.Shortcut, func(fyne.Shortcut) { v.showPrintDialog() })
+	w.Canvas().AddShortcut(printItem.Shortcut, func(fyne.Shortcut) {
+		if !printItem.Disabled {
+			v.showPrintDialog()
+		}
+	})
 
 	// Edit > Find (Ctrl+F) shows the search bar; F3 and Shift+F3 go to the
 	// next and previous result, in the search bar and in the document.
@@ -103,33 +115,45 @@ func main() {
 		mainMenu.Refresh()
 	}
 	w.SetMainMenu(mainMenu)
+	v.mainMenu = mainMenu
+
+	w.SetContent(container.NewBorder(search.bar, nil, nil, nil, search.content))
+	w.Resize(fyne.NewSize(1024, 768))
 
 	if path := flag.Arg(0); path != "" {
 		contents, err := os.ReadFile(path)
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := v.load(contents, filepath.Base(path)); err != nil {
-			log.Fatal(err)
+		if *find != "" {
+			// After the password, if the PDF asks for one.
+			v.onLoaded = func() {
+				search.entry.SetText(*find)
+				search.show(w.Canvas())
+				search.search()
+			}
 		}
+		// Loaded once the window is shown: the password dialog of an
+		// encrypted PDF needs it.
+		a.Lifecycle().SetOnStarted(func() {
+			if err := v.load(contents, filepath.Base(path)); err != nil {
+				log.Fatal(err)
+			}
+		})
 	}
-
-	w.SetContent(container.NewBorder(search.bar, nil, nil, nil, search.content))
-	if *find != "" {
-		search.entry.SetText(*find)
-		search.show(w.Canvas())
-		search.search()
-	}
-	w.Resize(fyne.NewSize(1024, 768))
 	w.ShowAndRun()
 }
 
-// load shows contents in the viewer and titles the window after the
-// document.
+// load shows contents in the viewer once it is loaded: at once, or after
+// the password dialog of an encrypted PDF.
 func (v *viewer) load(contents []byte, name string) error {
-	if err := v.doc.LoadFromMemory(contents); err != nil {
-		return err
-	}
+	v.doc.OnLoaded = func() { v.loaded(contents, name) }
+	return v.doc.LoadFromMemory(contents)
+}
+
+// loaded titles the window after the document, and enables saving and,
+// if the document allows it, printing.
+func (v *viewer) loaded(contents []byte, name string) {
 	v.contents, v.name = contents, name
 
 	// The save button appears in the toolbar once a callback is set.
@@ -138,15 +162,21 @@ func (v *viewer) load(contents []byte, name string) error {
 
 	title := name
 	v.title = name
-	if src, err := pdf.OpenSource(contents); err == nil {
-		if t := src.Metadata().Title; t != "" {
-			title = t + " – " + name
-			v.title = t
-		}
-		_ = src.Close()
+	if t := v.doc.Metadata().Title; t != "" {
+		title = t + " – " + name
+		v.title = t
 	}
 	v.window.SetTitle(fmt.Sprintf("%s (%d pages)", title, v.doc.PageCount()))
-	return nil
+
+	// cera renders whatever the permissions say; not printing a document
+	// that does not allow it is up to the viewer.
+	v.printItem.Disabled = v.doc.Permissions()&pdf.PermPrint == 0
+	v.mainMenu.Refresh()
+
+	if f := v.onLoaded; f != nil {
+		v.onLoaded = nil
+		f()
+	}
 }
 
 // showPrintDialog prints the open PDF after the user confirmed the print

@@ -29,16 +29,90 @@ type Source struct {
 	text *cera.TextIndex
 }
 
-// OpenSource parses the PDF in contents.
+var (
+	// ErrPassword is returned (wrapped, test with errors.Is) when a PDF is
+	// encrypted and the password given does not open it: no password and
+	// a wrong one alike. Ask for one and open it again with
+	// [OpenSourceWithPassword].
+	ErrPassword = cera.ErrPassword
+	// ErrUnsupportedEncryption is returned (wrapped) for a PDF encrypted in
+	// a way that cannot be read: a security handler other than the
+	// standard one, such as certificates. No password opens it.
+	ErrUnsupportedEncryption = cera.ErrUnsupportedEncryption
+)
+
+// Permissions are what the author of an encrypted PDF allows a reader who
+// opened it with the user password. Rendering and text extraction work
+// regardless; whether to print or copy is the application's decision.
+type Permissions uint32
+
+// The permissions of an encrypted PDF.
+const (
+	// PermPrint allows printing; without PermPrintFaithful only in a
+	// quality that does not serve as a copy of the document.
+	PermPrint = Permissions(cera.PermPrint)
+	// PermModify allows changing the content of the document.
+	PermModify = Permissions(cera.PermModify)
+	// PermCopy allows copying text and graphics out of the document.
+	PermCopy = Permissions(cera.PermCopy)
+	// PermAnnotate allows adding and changing annotations, and filling in
+	// form fields.
+	PermAnnotate = Permissions(cera.PermAnnotate)
+	// PermFillForms allows filling in form fields, also without
+	// PermAnnotate.
+	PermFillForms = Permissions(cera.PermFillForms)
+	// PermExtract allowed extracting text and graphics for accessibility;
+	// PDF 2.0 always allows that.
+	PermExtract = Permissions(cera.PermExtract)
+	// PermAssemble allows inserting, deleting and rotating pages.
+	PermAssemble = Permissions(cera.PermAssemble)
+	// PermPrintFaithful allows printing in full quality.
+	PermPrintFaithful = Permissions(cera.PermPrintFaithful)
+
+	// AllPermissions is every permission: those of a PDF that is not
+	// encrypted, or that was opened with the owner password.
+	AllPermissions = Permissions(cera.AllPermissions)
+)
+
+// OpenSource parses the PDF in contents. An encrypted PDF that needs a
+// password returns an error wrapping [ErrPassword].
 func OpenSource(contents []byte) (*Source, error) {
+	return OpenSourceWithPassword(contents, "")
+}
+
+// OpenSourceWithPassword parses the encrypted PDF in contents with
+// password: its user password, or its owner password, which lifts the
+// restrictions of [Source.Permissions]. A wrong password returns an error
+// wrapping [ErrPassword], encryption that cannot be read one wrapping
+// [ErrUnsupportedEncryption].
+func OpenSourceWithPassword(contents []byte, password string) (*Source, error) {
 	if len(contents) == 0 {
 		return nil, errors.New("could not open pdf: empty contents")
 	}
-	doc, err := cera.Open(contents)
+	doc, err := cera.OpenWithPassword(contents, password)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open pdf")
 	}
 	return &Source{doc: doc}, nil
+}
+
+// Encrypted reports whether the PDF is encrypted; false after Close.
+func (s *Source) Encrypted() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.doc != nil && s.doc.Encrypted()
+}
+
+// Permissions returns what the PDF allows: [AllPermissions] if it is not
+// encrypted or was opened with the owner password, else what its author
+// granted; 0 after Close.
+func (s *Source) Permissions() Permissions {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.doc == nil {
+		return 0
+	}
+	return Permissions(s.doc.Permissions())
 }
 
 // PageCount returns the number of pages, or 0 after Close.
