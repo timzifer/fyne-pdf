@@ -126,6 +126,7 @@ func main() {
 	annotateMenu := fyne.NewMenu("Annotate")
 	toolBar := container.NewHBox()
 	var toolButtons []*widget.Button
+	tools := viewerTools()
 	for _, tool := range tools {
 		annotateMenu.Items = append(annotateMenu.Items, fyne.NewMenuItem(tool.label, func() { v.doc.SetTool(tool.tool) }))
 		b := widget.NewButtonWithIcon("", tool.icon, func() { v.doc.SetTool(tool.tool) })
@@ -215,23 +216,29 @@ func main() {
 	w.ShowAndRun()
 }
 
-// tools are the tools of the Annotate menu and the bar.
-var tools = []struct {
+// toolItem is a tool of the Annotate menu and the bar.
+type toolItem struct {
 	label string
 	icon  fyne.Resource
 	tool  pdf.Tool
-}{
-	{"Pan", fyne_lucide.Icon(fyne_lucide.IconHand), pdf.ToolNone},
-	{"Select Text", fyne_lucide.Icon(fyne_lucide.IconTextCursor), pdf.ToolSelect},
-	{"Highlight", fyne_lucide.Icon(fyne_lucide.IconHighlighter), pdf.ToolHighlight},
-	{"Underline", fyne_lucide.Icon(fyne_lucide.IconUnderline), pdf.ToolUnderline},
-	{"Strikethrough", fyne_lucide.Icon(fyne_lucide.IconStrikethrough), pdf.ToolStrikeOut},
-	{"Note", fyne_lucide.Icon(fyne_lucide.IconStickyNote), pdf.ToolNote},
-	{"Text Box", fyne_lucide.Icon(fyne_lucide.IconType), pdf.ToolFreeText},
-	{"Draw", fyne_lucide.Icon(fyne_lucide.IconPencil), pdf.ToolInk},
-	{"Rectangle", fyne_lucide.Icon(fyne_lucide.IconSquare), pdf.ToolRect},
-	{"Ellipse", fyne_lucide.Icon(fyne_lucide.IconCircle), pdf.ToolEllipse},
-	{"Line", fyne_lucide.Icon(fyne_lucide.IconSlash), pdf.ToolLine},
+}
+
+// viewerTools returns the tools of the Annotate menu and the bar. The icons
+// take the colour of the theme, so the app has to be there.
+func viewerTools() []toolItem {
+	return []toolItem{
+		{"Pan", fyne_lucide.Icon(fyne_lucide.IconHand), pdf.ToolNone},
+		{"Select Text", fyne_lucide.Icon(fyne_lucide.IconTextCursor), pdf.ToolSelect},
+		{"Highlight", fyne_lucide.Icon(fyne_lucide.IconHighlighter), pdf.ToolHighlight},
+		{"Underline", fyne_lucide.Icon(fyne_lucide.IconUnderline), pdf.ToolUnderline},
+		{"Strikethrough", fyne_lucide.Icon(fyne_lucide.IconStrikethrough), pdf.ToolStrikeOut},
+		{"Note", fyne_lucide.Icon(fyne_lucide.IconStickyNote), pdf.ToolNote},
+		{"Text Box", fyne_lucide.Icon(fyne_lucide.IconType), pdf.ToolFreeText},
+		{"Draw", fyne_lucide.Icon(fyne_lucide.IconPencil), pdf.ToolInk},
+		{"Rectangle", fyne_lucide.Icon(fyne_lucide.IconSquare), pdf.ToolRect},
+		{"Ellipse", fyne_lucide.Icon(fyne_lucide.IconCircle), pdf.ToolEllipse},
+		{"Line", fyne_lucide.Icon(fyne_lucide.IconMinus), pdf.ToolLine},
+	}
 }
 
 func setEnabled(b *widget.Button, enabled bool) {
