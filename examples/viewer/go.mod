@@ -1,8 +1,6 @@
 module github.com/timzifer/fyne-pdf/examples/viewer
 
-go 1.26.4
-
-toolchain go1.26.6
+go 1.27.1
 
 require (
 	fyne.io/fyne/v2 v2.8.1
@@ -32,10 +30,10 @@ require (
 	github.com/getsentry/sentry-go v0.46.0 // indirect
 	github.com/go-gl/gl v0.0.0-20260331235117-4566fea9a276 // indirect
 	github.com/go-gl/glfw/v3.4/glfw v0.1.0-pre.1.0.20260707082822-2a407d02d01a // indirect
-	github.com/go-images/jpeg v0.2.0 // indirect
-	github.com/go-images/jpeg2000 v0.13.2 // indirect
-	github.com/go-opentype/fonts v0.10.0 // indirect
-	github.com/go-opentype/opentype v0.13.0 // indirect
+	github.com/go-images/jpeg v0.3.0 // indirect
+	github.com/go-images/jpeg2000 v0.13.3 // indirect
+	github.com/go-opentype/fonts v0.12.0 // indirect
+	github.com/go-opentype/opentype v0.15.0 // indirect
 	github.com/go-text/render v0.2.1 // indirect
 	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
@@ -57,7 +55,7 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tannevaled/gobig2 v0.2.0 // indirect
-	github.com/timzifer/cera v0.6.1 // indirect
+	github.com/timzifer/cera v0.8.0 // indirect
 	github.com/timzifer/fyne_iconkit v0.1.0 // indirect
 	github.com/timzifer/fyne_lucide v1.2.0 // indirect
 	github.com/timzifer/fyne_tabler v1.2.0 // indirect
