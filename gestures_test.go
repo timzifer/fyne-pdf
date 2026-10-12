@@ -47,7 +47,7 @@ func zoomTop(d *Document, zoom float64) {
 
 // newGesture starts a new scroll gesture, as after a pause.
 func newGesture(d *Document) {
-	d.area.lastScroll = time.Time{}
+	d.scrollContainer.lastScroll = time.Time{}
 }
 
 func bottomOffset(d *Document) float32 {
@@ -61,7 +61,7 @@ func TestGestureCtrlWheelZoomsAroundCursor(t *testing.T) {
 
 	anchor := fyne.NewPos(300, 250)
 	before := pagePointAt(d, anchor)
-	d.area.Scrolled(wheel(wheelNotch, d.scrollContainer.Offset.Add(anchor)))
+	d.scrollContainer.Scrolled(wheel(wheelNotch, anchor))
 	settle(d)
 
 	if z := zoomOf(t, d); !approx(z, zoomWheelFactor) {
@@ -72,7 +72,7 @@ func TestGestureCtrlWheelZoomsAroundCursor(t *testing.T) {
 		t.Errorf("page point under cursor moved from %v to %v", before, after)
 	}
 
-	d.area.Scrolled(wheel(-2*wheelNotch, d.scrollContainer.Offset.Add(anchor)))
+	d.scrollContainer.Scrolled(wheel(-2*wheelNotch, anchor))
 	settle(d)
 	if z, want := zoomOf(t, d), zoomWheelFactor/(zoomWheelFactor*zoomWheelFactor); !approx(z, want) {
 		t.Errorf("zoom after zooming out = %v, want %v", z, want)
@@ -83,7 +83,7 @@ func TestGestureWheelScrolls(t *testing.T) {
 	d := newGestureDocument(t)
 	d.modifiers = holding(0)
 
-	d.area.Scrolled(wheel(-wheelNotch, fyne.NewPos(100, 100)))
+	d.scrollContainer.Scrolled(wheel(-wheelNotch, fyne.NewPos(100, 100)))
 	if y := d.scrollContainer.Offset.Y; y != wheelNotch {
 		t.Errorf("offset after scrolling = %v, want %v", y, wheelNotch)
 	}
@@ -98,11 +98,11 @@ func TestGestureScrollTurnsPage(t *testing.T) {
 	d.scrollTo(fyne.NewPos(0, bottomOffset(d)))
 
 	// One notch past the bottom is not enough, the second one turns.
-	d.area.Scrolled(wheel(-wheelNotch, fyne.Position{}))
+	d.scrollContainer.Scrolled(wheel(-wheelNotch, fyne.Position{}))
 	if p := d.CurrentPage(); p != 0 {
 		t.Fatalf("page after one notch = %d, want 0", p)
 	}
-	d.area.Scrolled(wheel(-wheelNotch, fyne.Position{}))
+	d.scrollContainer.Scrolled(wheel(-wheelNotch, fyne.Position{}))
 	settle(d)
 	if p := d.CurrentPage(); p != 1 {
 		t.Fatalf("page after two notches = %d, want 1", p)
@@ -115,15 +115,15 @@ func TestGestureScrollTurnsPage(t *testing.T) {
 	}
 
 	// The same gesture does not turn back at the top of the new page.
-	d.area.Scrolled(wheel(3*wheelNotch, fyne.Position{}))
+	d.scrollContainer.Scrolled(wheel(3*wheelNotch, fyne.Position{}))
 	if p := d.CurrentPage(); p != 1 {
 		t.Fatalf("page after scrolling back in the same gesture = %d, want 1", p)
 	}
 
 	// A new gesture does, and shows the bottom of the previous page.
 	newGesture(d)
-	d.area.Scrolled(wheel(wheelNotch, fyne.Position{}))
-	d.area.Scrolled(wheel(wheelNotch, fyne.Position{}))
+	d.scrollContainer.Scrolled(wheel(wheelNotch, fyne.Position{}))
+	d.scrollContainer.Scrolled(wheel(wheelNotch, fyne.Position{}))
 	settle(d)
 	if p := d.CurrentPage(); p != 0 {
 		t.Fatalf("page after scrolling up = %d, want 0", p)
@@ -135,7 +135,7 @@ func TestGestureScrollTurnsPage(t *testing.T) {
 	// No page before the first one.
 	newGesture(d)
 	d.scrollTo(fyne.Position{})
-	d.area.Scrolled(wheel(2*wheelNotch, fyne.Position{}))
+	d.scrollContainer.Scrolled(wheel(2*wheelNotch, fyne.Position{}))
 	if p := d.CurrentPage(); p != 0 {
 		t.Errorf("page = %d, want 0", p)
 	}
@@ -147,8 +147,8 @@ func TestGestureScrollTurnsFittedPage(t *testing.T) {
 	d.modifiers = holding(0)
 	fit := zoomOf(t, d)
 
-	d.area.Scrolled(wheel(-wheelNotch, fyne.Position{}))
-	d.area.Scrolled(wheel(-wheelNotch, fyne.Position{}))
+	d.scrollContainer.Scrolled(wheel(-wheelNotch, fyne.Position{}))
+	d.scrollContainer.Scrolled(wheel(-wheelNotch, fyne.Position{}))
 	settle(d)
 	if p := d.CurrentPage(); p != 1 {
 		t.Fatalf("page = %d, want 1", p)
@@ -313,4 +313,41 @@ func TestGestureFocus(t *testing.T) {
 		t.Error("page view not focused after a tap")
 	}
 	d.area.TypedRune('x')
+}
+
+// TestGesturesStayInView checks that the pointer gestures reach the page
+// view only where it is visible: the pages of a zoomed document reach far
+// below the view, behind the thumbnail strip.
+func TestGesturesStayInView(t *testing.T) {
+	d := newGestureDocument(t)
+	d.base.Refresh()
+	if !d.thumbnailScroller.Visible() || d.thumbnailScroller.Size().Height == 0 {
+		t.Fatal("thumbnail strip not shown")
+	}
+	zoomTop(d, 2)
+	c := fyne.CurrentApp().Driver().CanvasForObject(d)
+	abs := fyne.CurrentApp().Driver().AbsolutePositionForObject
+
+	strip := abs(d.thumbnailScroller).AddXY(20, 20)
+	test.Drag(c, strip, -30, -40)
+	if o := d.scrollContainer.Offset; o != (fyne.Position{}) {
+		t.Errorf("dragging on the thumbnail strip panned the pages to %v", o)
+	}
+	test.TapCanvas(c, abs(d.thumbnails[2]).AddXY(10, 10))
+	if p := d.CurrentPage(); p != 2 {
+		t.Errorf("tapping the third thumbnail went to page %d", p)
+	}
+
+	zoomTop(d, 2)
+	view := abs(d.scrollContainer).AddXY(100, 100)
+	test.Drag(c, view, -30, -40)
+	if o := d.scrollContainer.Offset; o == (fyne.Position{}) {
+		t.Error("dragging on the pages did not pan")
+	}
+	d.modifiers = holding(fyne.KeyModifierShortcutDefault)
+	test.Scroll(c, view, 0, wheelNotch)
+	settle(d)
+	if z := zoomOf(t, d); !approx(z, 2*zoomWheelFactor) {
+		t.Errorf("zoom after Ctrl+wheel on the pages = %v, want %v", z, 2*zoomWheelFactor)
+	}
 }

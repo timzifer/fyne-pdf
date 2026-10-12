@@ -173,7 +173,7 @@ func TestContinuousCurrentPageFollowsScroll(t *testing.T) {
 	// Wheel scrolling crosses page boundaries without turning pages.
 	d.scrollTo(fyne.NewPos(0, pageTop(d, 8)-view.Height))
 	for range 4 {
-		d.area.Scrolled(wheel(-wheelNotch, fyne.Position{}))
+		d.scrollContainer.Scrolled(wheel(-wheelNotch, fyne.Position{}))
 	}
 	settle(d)
 	if y, want := d.scrollContainer.Offset.Y, pageTop(d, 8)-view.Height+4*wheelNotch; !approx(float64(y), float64(want)) {
@@ -296,7 +296,7 @@ func TestContinuousAnchor(t *testing.T) {
 	d.modifiers = holding(fyne.KeyModifierShortcutDefault)
 	at := fyne.NewPos(200, 100)
 	page, point = pointAt(d, at)
-	d.area.Scrolled(wheel(-wheelNotch, d.scrollContainer.Offset.Add(at)))
+	d.scrollContainer.Scrolled(wheel(-wheelNotch, at))
 	settle(d)
 	if p, pt := pointAt(d, at); p != page || !samePoint(pt, point) {
 		t.Errorf("point under the pointer moved from %d %v to %d %v", page, point, p, pt)
