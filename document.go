@@ -111,7 +111,7 @@ type (
 		toolbar            *fyne.Container
 		zoom               binding.Float
 		zoomSlider         *widget.Slider
-		scrollContainer    *container.Scroll
+		scrollContainer    *pageScroll
 
 		toggleThumbnailsButton *widget.Button
 		viewModeButton         *widget.Button
@@ -216,7 +216,7 @@ func NewDocument() *Document {
 	d.thumbnailScroller = container.NewHScroll(d.thumbnailContainer)
 
 	d.area = newPageArea(d)
-	d.scrollContainer = container.NewScroll(d.area)
+	d.scrollContainer = newPageScroll(d, d.area)
 	d.scrollContainer.OnScrolled = func(fyne.Position) { d.scrolled() }
 
 	d.zoomSlider = widget.NewSliderWithData(minZoom, maxZoom, d.zoom)

@@ -6,6 +6,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 )
@@ -35,25 +36,40 @@ const (
 	pageScrollOverlap = 0.1
 )
 
-// pageArea is the content of the main scroll view. It shows the pages and
-// handles the viewer gestures: Ctrl+wheel zoom, page turns at the edges
-// (showing one page), dragging to pan, double tap, and keyboard navigation
-// once focused.
-type pageArea struct {
-	widget.BaseWidget
+type (
+	// pageArea is the content of the main scroll view. It shows the pages
+	// and handles the viewer gestures but the wheel: dragging to pan, double
+	// tap, and keyboard navigation once focused.
+	//
+	// It must not be fyne.Scrollable: Fyne makes every Scrollable a clip of
+	// its own when finding the object under the pointer, in place of the
+	// clip of the scroll view around it (fyne v2.8.1). The page area, as
+	// large as the pages, would then take the drags and taps meant for what
+	// lies beside or below the view, such as the thumbnail strip.
+	pageArea struct {
+		widget.BaseWidget
 
-	doc *Document
+		doc *Document
+	}
 
-	// overscroll accumulates scrolling past the top (positive) or bottom
-	// (negative) edge of the page within one gesture.
-	overscroll float32
-	lastScroll time.Time
-	// turned is set when the current gesture has turned a page.
-	turned bool
-}
+	// pageScroll is the main scroll view. It handles the wheel: Ctrl+wheel
+	// zooms, and showing one page, scrolling on past its top or bottom
+	// turns the page.
+	pageScroll struct {
+		container.Scroll
+
+		doc *Document
+		// overscroll accumulates scrolling past the top (positive) or
+		// bottom (negative) edge of the page within one gesture.
+		overscroll float32
+		lastScroll time.Time
+		// turned is set when the current gesture has turned a page.
+		turned bool
+	}
+)
 
 var (
-	_ fyne.Scrollable     = (*pageArea)(nil)
+	_ fyne.Scrollable     = (*pageScroll)(nil)
 	_ fyne.Draggable      = (*pageArea)(nil)
 	_ fyne.Tappable       = (*pageArea)(nil)
 	_ fyne.DoubleTappable = (*pageArea)(nil)
@@ -79,19 +95,27 @@ func (a *pageArea) MinSize() fyne.Size {
 	return a.doc.layout.size
 }
 
+func newPageScroll(d *Document, content fyne.CanvasObject) *pageScroll {
+	s := &pageScroll{doc: d}
+	s.Content = content
+	s.Direction = container.ScrollBoth
+	s.ExtendBaseWidget(s)
+	return s
+}
+
 // Scrolled zooms with Ctrl (Cmd on macOS) held, otherwise scrolls the view.
 // Showing one page, it turns the page when scrolling on past its top or
 // bottom.
-func (a *pageArea) Scrolled(ev *fyne.ScrollEvent) {
+func (a *pageScroll) Scrolled(ev *fyne.ScrollEvent) {
 	d := a.doc
 	if d.zoomModifier() {
 		factor := math.Pow(zoomWheelFactor, float64(ev.Scrolled.DY)/wheelNotch)
-		d.zoomAt(d.scale*factor, ev.Position.Subtract(d.scrollContainer.Offset))
+		d.zoomAt(d.scale*factor, ev.Position)
 		return
 	}
 
-	before := d.scrollContainer.Offset
-	d.scrollContainer.Scrolled(ev)
+	before := a.Offset
+	a.Scroll.Scrolled(ev)
 	if d.viewMode == ViewContinuous {
 		return
 	}
@@ -102,7 +126,7 @@ func (a *pageArea) Scrolled(ev *fyne.ScrollEvent) {
 	}
 	a.lastScroll = now
 
-	if d.scrollContainer.Offset != before || ev.Scrolled.DY == 0 {
+	if a.Offset != before || ev.Scrolled.DY == 0 {
 		a.overscroll = 0
 		return
 	}
