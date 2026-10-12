@@ -32,6 +32,11 @@ no cgo PDF library, no external binaries.
   Shift+F3), `ShowSearchResult(i)` and `SearchResults()` for a result list
 - Link borders: `SetShowLinkBorders(true)` draws the boxes hyperref puts
   around links, as Acrobat and Firefox do (off by default, never on thumbnails)
+- Outline: a side panel with the bookmarks of the document (`ShowOutline`,
+  toolbar button while there is one), titles styled as the PDF says; a tap
+  goes to the entry's destination, the entry of the current page is marked.
+  `Outline()` and `GoTo(Destination)` (XYZ, Fit, FitH, FitV, FitR) for
+  your own navigation
 - Encrypted PDFs: `LoadFromMemory` asks for the password with a dialog (or
   `PasswordCallback`), `OnLoaded` reports the loaded PDF; `Encrypted()` and
   `Permissions()` (`PermPrint`, `PermCopy`, …) tell what the author allows —
@@ -115,7 +120,8 @@ and a "Save as PDF" button.
 
 Edit > Find (Ctrl+F) opens a search bar with options and a result count;
 the results are listed beside the pages ([search.go](examples/viewer/search.go)).
-View > Link Borders switches the link borders on and off. An encrypted PDF
+View > Link Borders switches the link borders on and off. Documents with
+bookmarks open with the outline beside the pages. An encrypted PDF
 asks for its password; File > Print is disabled when it does not allow
 printing.
 
