@@ -26,9 +26,13 @@ no cgo PDF library, no external binaries.
   first, then their neighbours; the resolution of the main view follows the
   zoom level and the screen scale, the page images kept share a memory
   budget
+- Text search: `Search` finds a query in the background (match case, whole
+  words, ignore diacritics), highlights the results on the pages and scrolls
+  to the current one; `NextSearchResult` / `PreviousSearchResult` (also F3 /
+  Shift+F3), `ShowSearchResult(i)` and `SearchResults()` for a result list
 - Optional save button via `SaveCallback`, render errors via `OnError`
 - `Source`: goroutine-safe access to an opened PDF — page count, page bounds,
-  rendering at arbitrary DPI, document metadata
+  rendering at arbitrary DPI, document metadata, page text and search
 - `NewImageFromMemory`: render a single page to an `image.Image` without any UI
 - Render timeout per page (15 s); slow pages fall back to the partially drawn
   image instead of blocking the UI
@@ -39,7 +43,7 @@ no cgo PDF library, no external binaries.
 go get github.com/timzifer/fyne-pdf
 ```
 
-Requires Go 1.26+ and Fyne 2.6+ (uses `fyne.Do`). Fyne itself needs a C
+Requires Go 1.27.1+ and Fyne 2.6+ (uses `fyne.Do`). Fyne itself needs a C
 compiler and the platform graphics headers — see the [Fyne prerequisites](https://docs.fyne.io/started/).
 
 ## Usage
@@ -81,12 +85,12 @@ func main() {
 }
 ```
 
-A complete viewer with an open dialog, save button, printing and error
-reporting is in [examples/viewer](examples/viewer/main.go):
+A complete viewer with an open dialog, save button, printing, search and
+error reporting is in [examples/viewer](examples/viewer/main.go):
 
 ```sh
 cd examples/viewer
-go run . [-print-dialog native|fyne] [file.pdf]
+go run . [-print-dialog native|fyne] [-find text] [file.pdf]
 ```
 
 The example is a module of its own that builds against the library in this
@@ -97,6 +101,28 @@ File > Print (Ctrl+P) prints through [goprint](https://github.com/timzifer/gopri
 `-print-dialog native` (the default) shows the platform's print dialog,
 `-print-dialog fyne` the dialog `fyneprint` draws with Fyne, with a preview
 and a "Save as PDF" button.
+
+Edit > Find (Ctrl+F) opens a search bar with options and a result count;
+the results are listed beside the pages ([search.go](examples/viewer/search.go)).
+
+### Search
+
+```go
+doc.OnSearchChanged = func() { // on the main goroutine
+	results := doc.SearchResults() // Page, Prefix, Text, Suffix, Rects
+	fmt.Println(len(results), "found, current:", doc.CurrentSearchResult(), "searching:", doc.Searching())
+}
+doc.Search("gamma", pdf.SearchOptions{WholeWord: true})
+doc.NextSearchResult()  // or F3 in the page view
+doc.ShowSearchResult(3) // scroll to a result, e.g. picked from a list
+doc.ClearSearch()
+```
+
+The results are highlighted on the pages (`HighlightColor`,
+`CurrentHighlightColor`). Without UI, `Source.Search`, `Source.SearchPage` and
+`Source.PageText` return the results and the text; `Rect`s are in points of
+the displayed page, origin top left. `Page.SetHighlights` marks any areas of
+a page.
 
 ### Render a page to an image
 

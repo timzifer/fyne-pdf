@@ -25,6 +25,8 @@ var paper = color.RGBA{R: 255, G: 255, B: 255, A: 255}
 type Source struct {
 	mu  sync.Mutex
 	doc *cera.Document
+	// text is the text index for searching, made on first use.
+	text *cera.TextIndex
 }
 
 // OpenSource parses the PDF in contents.
@@ -108,6 +110,7 @@ func (s *Source) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.doc = nil
+	s.text = nil
 	return nil
 }
 

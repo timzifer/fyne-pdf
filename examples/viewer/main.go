@@ -3,9 +3,13 @@
 // directory:
 //
 //	cd examples/viewer
-//	go run . [-print-dialog native|fyne] [file.pdf]
+//	go run . [-print-dialog native|fyne] [-find text] [file.pdf]
 //
 // Without a file it starts empty; open a PDF with File > Open (Ctrl+O).
+// Edit > Find (Ctrl+F) searches it: the results are highlighted on the
+// pages and listed beside them; Enter and F3 go to the next result,
+// Shift+F3 to the previous one, a click in the list to that result;
+// -find searches for text right away.
 // File > Print (Ctrl+P) prints it through goprint: -print-dialog native
 // (the default) shows the platform's print dialog, -print-dialog fyne the
 // one fyneprint draws with Fyne, with a preview and a "Save as PDF" button.
@@ -22,6 +26,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/storage"
@@ -42,9 +47,10 @@ type viewer struct {
 }
 
 func main() {
+	find := flag.String("find", "", "search the document for this text at the start")
 	printDialog := flag.String("print-dialog", "native", `print dialog: "native" (the platform's) or "fyne" (drawn by fyneprint)`)
 	flag.Usage = func() {
-		_, _ = fmt.Fprintln(flag.CommandLine.Output(), "usage: viewer [-print-dialog native|fyne] [file.pdf]")
+		_, _ = fmt.Fprintln(flag.CommandLine.Output(), "usage: viewer [-print-dialog native|fyne] [-find text] [file.pdf]")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -73,7 +79,19 @@ func main() {
 	printItem := fyne.NewMenuItem("Print…", v.showPrintDialog)
 	printItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyP, Modifier: fyne.KeyModifierShortcutDefault}
 	w.Canvas().AddShortcut(printItem.Shortcut, func(fyne.Shortcut) { v.showPrintDialog() })
-	w.SetMainMenu(fyne.NewMainMenu(fyne.NewMenu("File", openItem, printItem)))
+
+	// Edit > Find (Ctrl+F) shows the search bar; F3 and Shift+F3 go to the
+	// next and previous result, in the search bar and in the document.
+	search := newSearchPanel(v.doc)
+	findItem := fyne.NewMenuItem("Find…", func() { search.show(w.Canvas()) })
+	findItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyF, Modifier: fyne.KeyModifierShortcutDefault}
+	w.Canvas().AddShortcut(findItem.Shortcut, func(fyne.Shortcut) { search.show(w.Canvas()) })
+	nextItem := fyne.NewMenuItem("Find Next (F3)", v.doc.NextSearchResult)
+	previousItem := fyne.NewMenuItem("Find Previous (Shift+F3)", v.doc.PreviousSearchResult)
+	w.SetMainMenu(fyne.NewMainMenu(
+		fyne.NewMenu("File", openItem, printItem),
+		fyne.NewMenu("Edit", findItem, nextItem, previousItem),
+	))
 
 	if path := flag.Arg(0); path != "" {
 		contents, err := os.ReadFile(path)
@@ -85,7 +103,12 @@ func main() {
 		}
 	}
 
-	w.SetContent(v.doc)
+	w.SetContent(container.NewBorder(search.bar, nil, nil, nil, search.content))
+	if *find != "" {
+		search.entry.SetText(*find)
+		search.show(w.Canvas())
+		search.search()
+	}
 	w.Resize(fyne.NewSize(1024, 768))
 	w.ShowAndRun()
 }

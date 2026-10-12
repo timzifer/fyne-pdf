@@ -169,7 +169,8 @@ func (a *pageArea) TypedRune(rune) {}
 // TypedKey navigates: Page Up/Down and Space (Shift+Space) scroll by a
 // screen (and then turn the page, showing one page), Home/End go to the
 // first/last page, the arrow keys scroll; Left/Right go to the previous or
-// next page when the pages fit horizontally.
+// next page when the pages fit horizontally. F3 (Shift+F3) goes to the
+// next (previous) search result.
 func (a *pageArea) TypedKey(ev *fyne.KeyEvent) {
 	d := a.doc
 	switch ev.Name {
@@ -182,6 +183,12 @@ func (a *pageArea) TypedKey(ev *fyne.KeyEvent) {
 			d.scrollScreen(-1)
 		} else {
 			d.scrollScreen(1)
+		}
+	case fyne.KeyF3:
+		if d.modifiers()&fyne.KeyModifierShift != 0 {
+			d.PreviousSearchResult()
+		} else {
+			d.NextSearchResult()
 		}
 	case fyne.KeyHome:
 		d.turnPage(0, false)

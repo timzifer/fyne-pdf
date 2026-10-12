@@ -1,13 +1,11 @@
 module github.com/timzifer/fyne-pdf
 
-go 1.26.4
-
-toolchain go1.26.6
+go 1.27.1
 
 require (
 	fyne.io/fyne/v2 v2.8.1
 	github.com/cockroachdb/errors v1.14.0
-	github.com/timzifer/cera v0.6.1
+	github.com/timzifer/cera v0.8.0
 	github.com/timzifer/fyne_lucide v1.2.0
 	github.com/timzifer/fyne_tabler v1.2.0
 	golang.org/x/sys v0.48.0
@@ -25,10 +23,10 @@ require (
 	github.com/fyne-io/oksvg v0.2.0 // indirect
 	github.com/getsentry/sentry-go v0.46.0 // indirect
 	github.com/go-gl/gl v0.0.0-20260331235117-4566fea9a276 // indirect
-	github.com/go-images/jpeg v0.2.0 // indirect
-	github.com/go-images/jpeg2000 v0.13.2 // indirect
-	github.com/go-opentype/fonts v0.10.0 // indirect
-	github.com/go-opentype/opentype v0.13.0 // indirect
+	github.com/go-images/jpeg v0.3.0 // indirect
+	github.com/go-images/jpeg2000 v0.13.3 // indirect
+	github.com/go-opentype/fonts v0.12.0 // indirect
+	github.com/go-opentype/opentype v0.15.0 // indirect
 	github.com/go-text/render v0.2.1 // indirect
 	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
