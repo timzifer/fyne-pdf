@@ -50,6 +50,8 @@ type (
 		widget.BaseWidget
 
 		doc *Document
+		// overLink is set while the pointer is over a link.
+		overLink bool
 	}
 
 	// pageScroll is the main scroll view. It handles the wheel: Ctrl+wheel
@@ -156,9 +158,20 @@ func (a *pageArea) Dragged(ev *fyne.DragEvent) {
 
 func (a *pageArea) DragEnd() {}
 
-// Tapped focuses the view on touch devices; desktop focuses on MouseDown.
-func (a *pageArea) Tapped(*fyne.PointEvent) {
+// Tapped follows a link. It focuses the view on touch devices; desktop
+// focuses on MouseDown.
+func (a *pageArea) Tapped(ev *fyne.PointEvent) {
 	a.focus()
+	d := a.doc
+	if l, ok := d.linkAt(ev.Position); ok {
+		d.followLink(l)
+		return
+	}
+	if annot, ok := d.annotationAt(ev.Position); ok {
+		d.selectAnnotation(annot, false, true)
+		return
+	}
+	d.comments.clearSelection()
 }
 
 // DoubleTapped switches between the fitted page and 100 %, zooming in at

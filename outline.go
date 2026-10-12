@@ -117,20 +117,28 @@ func (s *Source) outlineItems(items []cera.OutlineItem) []OutlineItem {
 		}
 		if t := item.Target; t != nil {
 			o.URI, o.External, o.File = t.URI, t.External, t.File
-			if dest, ok := s.doc.Destination(t); ok {
-				o.Dest = &Destination{
-					Page: dest.Page,
-					Fit:  dest.Fit,
-					X:    dest.X,
-					Y:    dest.Y,
-					Zoom: dest.Zoom,
-					Rect: Rect{X0: dest.Rect.X0, Y0: dest.Rect.Y0, X1: dest.Rect.X1, Y1: dest.Rect.Y1},
-				}
-			}
+			o.Dest = s.destination(t)
 		}
 		out[i] = o
 	}
 	return out
+}
+
+// destination resolves t to a view of a page of the document; nil if it
+// leads elsewhere or nowhere.
+func (s *Source) destination(t *cera.LinkTarget) *Destination {
+	dest, ok := s.doc.Destination(t)
+	if !ok {
+		return nil
+	}
+	return &Destination{
+		Page: dest.Page,
+		Fit:  dest.Fit,
+		X:    dest.X,
+		Y:    dest.Y,
+		Zoom: dest.Zoom,
+		Rect: Rect{X0: dest.Rect.X0, Y0: dest.Rect.Y0, X1: dest.Rect.X1, Y1: dest.Rect.Y1},
+	}
 }
 
 // Outline returns the outline of the loaded PDF, see [Source.Outline].

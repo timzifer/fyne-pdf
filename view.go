@@ -231,6 +231,7 @@ func (d *Document) updateViews() {
 		view.pageSize = d.pageSizes[page]
 		view.SetHighlights(d.highlightsOf(page))
 	}
+	d.loadLinks(live)
 	d.showImages()
 	d.area.Refresh()
 }

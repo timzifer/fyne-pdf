@@ -98,6 +98,11 @@ type (
 		// loaded: by LoadFromMemory, or once the password asked for by
 		// its dialog has been entered.
 		OnLoaded func()
+		// OnLinkTapped, if set, is called when a link on a page is
+		// tapped; returning true means it handled the link. Otherwise the
+		// widget goes to the link's destination, or opens its URI in the
+		// browser; it does not follow links to other files.
+		OnLinkTapped func(Link) bool
 		// HighlightColor fills the search results on the pages,
 		// CurrentHighlightColor the current one. If nil, translucent
 		// yellow and orange are used.
@@ -116,6 +121,7 @@ type (
 
 		toggleThumbnailsButton *widget.Button
 		outlineButton          *widget.Button
+		commentsButton         *widget.Button
 		viewModeButton         *widget.Button
 		zoomInButton           *widget.Button
 		zoomOutButton          *widget.Button
@@ -152,8 +158,9 @@ type (
 		// passwordEntry is its entry; nil if no dialog is shown.
 		passwordDialog *dialog.FormDialog
 		passwordEntry  *widget.Entry
-		// outline is the outline panel.
-		outline *outlinePanel
+		// outline is the outline panel, comments the comments panel.
+		outline  *outlinePanel
+		comments *commentsPanel
 		// openURL opens the URIs of outline entries; replaced in tests.
 		openURL func(*url.URL) error
 		// search is the state of the search, see Document.Search.
@@ -186,6 +193,9 @@ type (
 		renderedPixels int
 		useClock       uint64
 		failed         map[int]float64
+		// links are the links by page, nil while being read; a page
+		// missing has not been asked for.
+		links map[int][]Link
 		// renderOptions are those of the main view; images rendered with
 		// others are shown until they are rendered again.
 		renderOptions RenderOptions
@@ -217,6 +227,7 @@ func NewDocument() *Document {
 		views:              map[int]*Page{},
 		rendered:           map[int]*renderedPage{},
 		failed:             map[int]float64{},
+		links:              map[int][]Link{},
 	}
 	_ = d.zoom.Set(1)
 
@@ -307,6 +318,14 @@ func NewDocument() *Document {
 	d.outlineButton.Importance = widget.LowImportance
 	d.outlineButton.Hidden = true
 
+	d.comments = newCommentsPanel(d)
+	d.commentsButton = widget.NewButton("", func() {
+		d.ShowComments(!d.CommentsShown())
+	})
+	d.commentsButton.Icon = fyne_lucide.Icon(fyne_lucide.IconMessageSquare)
+	d.commentsButton.Importance = widget.LowImportance
+	d.commentsButton.Hidden = true
+
 	d.toolbar.Add(d.outlineButton)
 	d.toolbar.Add(d.toggleThumbnailsButton)
 	d.toolbar.Add(layout.NewSpacer())
@@ -320,6 +339,7 @@ func NewDocument() *Document {
 	d.toolbar.Add(fitVerticalButton)
 	d.toolbar.Add(fitHorizontalButton)
 	d.toolbar.Add(d.viewModeButton)
+	d.toolbar.Add(d.commentsButton)
 	d.toolbar.Add(d.saveButton)
 
 	bottom := container.NewVBox(
@@ -327,10 +347,10 @@ func NewDocument() *Document {
 		d.thumbnailScroller,
 	)
 	// The view changes size with the window, but also when the thumbnail
-	// strip or the outline is shown or hidden.
+	// strip, the outline or the comments are shown or hidden.
 	d.base = container.New(
-		&afterLayout{layout: layout.NewBorderLayout(nil, bottom, d.outline.box, nil), after: d.viewResized},
-		bottom, d.outline.box, d.scrollContainer,
+		&afterLayout{layout: layout.NewBorderLayout(nil, bottom, d.outline.box, d.comments.box), after: d.viewResized},
+		bottom, d.outline.box, d.comments.box, d.scrollContainer,
 	)
 
 	d.ExtendBaseWidget(d)
@@ -632,6 +652,7 @@ func (d *Document) load(src *Source) {
 	d.jobs, d.rendering, d.inflightCancel = nil, false, nil
 	d.rendered, d.renderedPixels = map[int]*renderedPage{}, 0
 	d.failed = map[int]float64{}
+	d.links = map[int][]Link{}
 	d.mutex.Unlock()
 
 	scale := d.canvasScale()
@@ -673,6 +694,8 @@ func (d *Document) load(src *Source) {
 
 	d.outline.setItems(src.Outline())
 	d.ShowOutline(d.OutlineShown())
+	d.comments.reset()
+	d.loadAnnotations(src, ctx, numPages)
 
 	thumbnails := d.thumbnails
 	d.pending.Add(1)
