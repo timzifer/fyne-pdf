@@ -39,12 +39,6 @@ func newSelectDocument(t *testing.T, contents []byte) *Document {
 	return d
 }
 
-// pagePos returns the position on the canvas of the point x, y of page 0.
-func pagePos(d *Document, x, y float64) fyne.Position {
-	pos := linkPoint(d, 0, x, y).Subtract(d.scrollContainer.Offset)
-	return fyne.CurrentApp().Driver().AbsolutePositionForObject(d.scrollContainer).Add(pos)
-}
-
 // dragArea drags on the page area from the point a to b of page 0 in
 // steps, as the GLFW driver reports it: each event at the pointer's new
 // position with the distance since the last one.
