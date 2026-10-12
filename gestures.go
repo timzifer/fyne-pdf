@@ -162,9 +162,16 @@ func (a *pageArea) DragEnd() {}
 // focuses on MouseDown.
 func (a *pageArea) Tapped(ev *fyne.PointEvent) {
 	a.focus()
-	if l, ok := a.doc.linkAt(ev.Position); ok {
-		a.doc.followLink(l)
+	d := a.doc
+	if l, ok := d.linkAt(ev.Position); ok {
+		d.followLink(l)
+		return
 	}
+	if annot, ok := d.annotationAt(ev.Position); ok {
+		d.selectAnnotation(annot, false, true)
+		return
+	}
+	d.comments.clearSelection()
 }
 
 // DoubleTapped switches between the fitted page and 100 %, zooming in at

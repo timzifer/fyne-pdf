@@ -121,6 +121,7 @@ type (
 
 		toggleThumbnailsButton *widget.Button
 		outlineButton          *widget.Button
+		commentsButton         *widget.Button
 		viewModeButton         *widget.Button
 		zoomInButton           *widget.Button
 		zoomOutButton          *widget.Button
@@ -157,8 +158,9 @@ type (
 		// passwordEntry is its entry; nil if no dialog is shown.
 		passwordDialog *dialog.FormDialog
 		passwordEntry  *widget.Entry
-		// outline is the outline panel.
-		outline *outlinePanel
+		// outline is the outline panel, comments the comments panel.
+		outline  *outlinePanel
+		comments *commentsPanel
 		// openURL opens the URIs of outline entries; replaced in tests.
 		openURL func(*url.URL) error
 		// search is the state of the search, see Document.Search.
@@ -316,6 +318,14 @@ func NewDocument() *Document {
 	d.outlineButton.Importance = widget.LowImportance
 	d.outlineButton.Hidden = true
 
+	d.comments = newCommentsPanel(d)
+	d.commentsButton = widget.NewButton("", func() {
+		d.ShowComments(!d.CommentsShown())
+	})
+	d.commentsButton.Icon = fyne_lucide.Icon(fyne_lucide.IconMessageSquare)
+	d.commentsButton.Importance = widget.LowImportance
+	d.commentsButton.Hidden = true
+
 	d.toolbar.Add(d.outlineButton)
 	d.toolbar.Add(d.toggleThumbnailsButton)
 	d.toolbar.Add(layout.NewSpacer())
@@ -329,6 +339,7 @@ func NewDocument() *Document {
 	d.toolbar.Add(fitVerticalButton)
 	d.toolbar.Add(fitHorizontalButton)
 	d.toolbar.Add(d.viewModeButton)
+	d.toolbar.Add(d.commentsButton)
 	d.toolbar.Add(d.saveButton)
 
 	bottom := container.NewVBox(
@@ -336,10 +347,10 @@ func NewDocument() *Document {
 		d.thumbnailScroller,
 	)
 	// The view changes size with the window, but also when the thumbnail
-	// strip or the outline is shown or hidden.
+	// strip, the outline or the comments are shown or hidden.
 	d.base = container.New(
-		&afterLayout{layout: layout.NewBorderLayout(nil, bottom, d.outline.box, nil), after: d.viewResized},
-		bottom, d.outline.box, d.scrollContainer,
+		&afterLayout{layout: layout.NewBorderLayout(nil, bottom, d.outline.box, d.comments.box), after: d.viewResized},
+		bottom, d.outline.box, d.comments.box, d.scrollContainer,
 	)
 
 	d.ExtendBaseWidget(d)
@@ -683,6 +694,8 @@ func (d *Document) load(src *Source) {
 
 	d.outline.setItems(src.Outline())
 	d.ShowOutline(d.OutlineShown())
+	d.comments.reset()
+	d.loadAnnotations(src, ctx, numPages)
 
 	thumbnails := d.thumbnails
 	d.pending.Add(1)
