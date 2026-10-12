@@ -10,6 +10,7 @@
 // pages and listed beside them; Enter and F3 go to the next result,
 // Shift+F3 to the previous one, a click in the list to that result;
 // -find searches for text right away.
+// The outline of a document with bookmarks is shown beside the pages.
 // An encrypted PDF asks for its password; without the right to print,
 // File > Print is disabled.
 // File > Print (Ctrl+P) prints it through goprint: -print-dialog native
@@ -167,6 +168,9 @@ func (v *viewer) loaded(contents []byte, name string) {
 		v.title = t
 	}
 	v.window.SetTitle(fmt.Sprintf("%s (%d pages)", title, v.doc.PageCount()))
+
+	// Documents with bookmarks open with the outline beside the pages.
+	v.doc.ShowOutline(len(v.doc.Outline()) > 0)
 
 	// cera renders whatever the permissions say; not printing a document
 	// that does not allow it is up to the viewer.

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -114,6 +115,7 @@ type (
 		scrollContainer    *pageScroll
 
 		toggleThumbnailsButton *widget.Button
+		outlineButton          *widget.Button
 		viewModeButton         *widget.Button
 		zoomInButton           *widget.Button
 		zoomOutButton          *widget.Button
@@ -150,6 +152,10 @@ type (
 		// passwordEntry is its entry; nil if no dialog is shown.
 		passwordDialog *dialog.FormDialog
 		passwordEntry  *widget.Entry
+		// outline is the outline panel.
+		outline *outlinePanel
+		// openURL opens the URIs of outline entries; replaced in tests.
+		openURL func(*url.URL) error
 		// search is the state of the search, see Document.Search.
 		search documentSearch
 		// modifiers returns the key modifiers held; replaced in tests.
@@ -206,6 +212,7 @@ func NewDocument() *Document {
 		zoom:               binding.NewFloat(),
 		runOnMain:          fyne.Do,
 		modifiers:          currentKeyModifiers,
+		openURL:            func(u *url.URL) error { return fyne.CurrentApp().OpenURL(u) },
 		scale:              1,
 		views:              map[int]*Page{},
 		rendered:           map[int]*renderedPage{},
@@ -292,6 +299,15 @@ func NewDocument() *Document {
 	d.saveButton.Importance = widget.LowImportance
 	d.saveButton.Hidden = true
 
+	d.outline = newOutlinePanel(d)
+	d.outlineButton = widget.NewButton("", func() {
+		d.ShowOutline(!d.OutlineShown())
+	})
+	d.outlineButton.Icon = fyne_lucide.Icon(fyne_lucide.IconBookmark)
+	d.outlineButton.Importance = widget.LowImportance
+	d.outlineButton.Hidden = true
+
+	d.toolbar.Add(d.outlineButton)
 	d.toolbar.Add(d.toggleThumbnailsButton)
 	d.toolbar.Add(layout.NewSpacer())
 	d.toolbar.Add(d.zoomOutButton)
@@ -311,10 +327,10 @@ func NewDocument() *Document {
 		d.thumbnailScroller,
 	)
 	// The view changes size with the window, but also when the thumbnail
-	// strip is shown or hidden.
+	// strip or the outline is shown or hidden.
 	d.base = container.New(
-		&afterLayout{layout: layout.NewBorderLayout(nil, bottom, nil, nil), after: d.viewResized},
-		bottom, d.scrollContainer,
+		&afterLayout{layout: layout.NewBorderLayout(nil, bottom, d.outline.box, nil), after: d.viewResized},
+		bottom, d.outline.box, d.scrollContainer,
 	)
 
 	d.ExtendBaseWidget(d)
@@ -655,6 +671,9 @@ func (d *Document) load(src *Source) {
 		d.thumbnailScroller.Show()
 	}
 
+	d.outline.setItems(src.Outline())
+	d.ShowOutline(d.OutlineShown())
+
 	thumbnails := d.thumbnails
 	d.pending.Add(1)
 	go func() {
@@ -732,6 +751,7 @@ func (d *Document) setCurrent(page int) {
 		thumbnail.SetSelected(i == page)
 	}
 	d.revealThumbnail(page)
+	d.outline.markCurrent()
 }
 
 // revealThumbnail scrolls the thumbnail strip so the thumbnail of page is
