@@ -99,6 +99,9 @@ type (
 		// was undone or redone, or the document was saved: when
 		// Modified, CanUndo or CanRedo may say something else.
 		OnChanged func()
+		// OnToolChanged is called when the tool changes, also by the
+		// toolbar's button for selecting text.
+		OnToolChanged func()
 		// Author is the author of the annotations made with the tools.
 		Author string
 		// AnnotationColor is the colour of the annotations made with the
@@ -180,6 +183,7 @@ type (
 		// does; textDialog asks for the text of a note or a text box,
 		// textEntry is its entry.
 		sketch     *sketch
+		moving     *annotationMove
 		textDialog *dialog.FormDialog
 		textEntry  *widget.Entry
 		// outline is the outline panel, comments the comments panel.

@@ -136,12 +136,13 @@ func TestDocumentSelectComment(t *testing.T) {
 	if len(hl) != 1 || hl[0].Color != selectionColor || !approx(float64(hl[0].Position.Y), 372*unitsPerPoint) {
 		t.Errorf("page 2 highlights %v, want the strikethrough marked", hl)
 	}
-	if !p.rows[annotKey{1, 0}].selected() || p.popup != nil {
-		t.Error("row not selected, or a popup shown for a tap in the list")
+	if !p.rows[annotKey{1, 0}].selected() || p.popup == nil {
+		t.Error("row not selected, or no popup for a tap in the list")
 	}
 
 	// A tap on the highlight on page 1 selects its row and shows the
-	// thread beside it.
+	// thread beside it. (A tap beside an open popup only closes it.)
+	p.hidePopup()
 	d.ShowPage(0)
 	settle(d)
 	c := fyne.CurrentApp().Driver().CanvasForObject(d)

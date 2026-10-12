@@ -39,7 +39,9 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/storage"
+	"fyne.io/fyne/v2/widget"
 	pdf "github.com/timzifer/fyne-pdf"
+	"github.com/timzifer/fyne_lucide"
 	"github.com/timzifer/goprint"
 	"github.com/timzifer/goprint/fyneprint"
 )
@@ -120,41 +122,48 @@ func main() {
 	linkBordersItem := fyne.NewMenuItem("Link Borders", nil)
 	undoItem := fyne.NewMenuItem("Undo (Ctrl+Z)", v.doc.Undo)
 	redoItem := fyne.NewMenuItem("Redo (Ctrl+Y)", v.doc.Redo)
+	// The tools are in the Annotate menu and in the bar above the pages.
 	annotateMenu := fyne.NewMenu("Annotate")
-	for _, tool := range []struct {
-		label string
-		tool  pdf.Tool
-	}{
-		{"Pan", pdf.ToolNone}, {"Select Text", pdf.ToolSelect},
-		{"Highlight", pdf.ToolHighlight}, {"Underline", pdf.ToolUnderline}, {"Strikethrough", pdf.ToolStrikeOut},
-		{"Note", pdf.ToolNote}, {"Text Box", pdf.ToolFreeText},
-		{"Draw", pdf.ToolInk}, {"Rectangle", pdf.ToolRect}, {"Ellipse", pdf.ToolEllipse}, {"Line", pdf.ToolLine},
-	} {
-		item := fyne.NewMenuItem(tool.label, func() { v.doc.SetTool(tool.tool) })
-		annotateMenu.Items = append(annotateMenu.Items, item)
+	toolBar := container.NewHBox()
+	var toolButtons []*widget.Button
+	for _, tool := range tools {
+		annotateMenu.Items = append(annotateMenu.Items, fyne.NewMenuItem(tool.label, func() { v.doc.SetTool(tool.tool) }))
+		b := widget.NewButtonWithIcon("", tool.icon, func() { v.doc.SetTool(tool.tool) })
+		b.Importance = widget.LowImportance
+		toolButtons = append(toolButtons, b)
+		toolBar.Add(b)
 	}
+	undoButton := widget.NewButtonWithIcon("", fyne_lucide.Icon(fyne_lucide.IconUndo2), v.doc.Undo)
+	redoButton := widget.NewButtonWithIcon("", fyne_lucide.Icon(fyne_lucide.IconRedo2), v.doc.Redo)
+	undoButton.Importance, redoButton.Importance = widget.LowImportance, widget.LowImportance
+	toolBar.Add(widget.NewSeparator())
+	toolBar.Add(undoButton)
+	toolBar.Add(redoButton)
 	mainMenu := fyne.NewMainMenu(
 		fyne.NewMenu("File", openItem, printItem),
 		fyne.NewMenu("Edit", undoItem, redoItem, fyne.NewMenuItemSeparator(), copyItem, fyne.NewMenuItemSeparator(), findItem, nextItem, previousItem),
 		fyne.NewMenu("View", linkBordersItem),
 		annotateMenu,
 	)
-	// The menus follow the tool and the history.
+	// The menus and the bar follow the tool and the history.
 	update := func() {
 		undoItem.Disabled, redoItem.Disabled = !v.doc.CanUndo(), !v.doc.CanRedo()
-		tools := []pdf.Tool{pdf.ToolNone, pdf.ToolSelect, pdf.ToolHighlight, pdf.ToolUnderline, pdf.ToolStrikeOut,
-			pdf.ToolNote, pdf.ToolFreeText, pdf.ToolInk, pdf.ToolRect, pdf.ToolEllipse, pdf.ToolLine}
+		setEnabled(undoButton, v.doc.CanUndo())
+		setEnabled(redoButton, v.doc.CanRedo())
 		for i, item := range annotateMenu.Items {
-			item.Checked = v.doc.Tool() == tools[i]
+			item.Checked = v.doc.Tool() == tools[i].tool
+			if item.Checked {
+				toolButtons[i].Importance = widget.HighImportance
+			} else {
+				toolButtons[i].Importance = widget.LowImportance
+			}
+			toolButtons[i].Refresh()
 		}
 		mainMenu.Refresh()
 		v.showTitle()
 	}
-	for _, item := range annotateMenu.Items {
-		action := item.Action
-		item.Action = func() { action(); update() }
-	}
 	v.doc.OnChanged = update
+	v.doc.OnToolChanged = update
 	if u, err := user.Current(); err == nil {
 		v.doc.Author = u.Username
 	}
@@ -179,7 +188,7 @@ func main() {
 	v.mainMenu = mainMenu
 	update()
 
-	w.SetContent(container.NewBorder(search.bar, nil, nil, nil, search.content))
+	w.SetContent(container.NewBorder(container.NewVBox(toolBar, search.bar), nil, nil, nil, search.content))
 	w.Resize(fyne.NewSize(1024, 768))
 
 	if path := flag.Arg(0); path != "" {
@@ -204,6 +213,33 @@ func main() {
 		})
 	}
 	w.ShowAndRun()
+}
+
+// tools are the tools of the Annotate menu and the bar.
+var tools = []struct {
+	label string
+	icon  fyne.Resource
+	tool  pdf.Tool
+}{
+	{"Pan", fyne_lucide.Icon(fyne_lucide.IconHand), pdf.ToolNone},
+	{"Select Text", fyne_lucide.Icon(fyne_lucide.IconTextCursor), pdf.ToolSelect},
+	{"Highlight", fyne_lucide.Icon(fyne_lucide.IconHighlighter), pdf.ToolHighlight},
+	{"Underline", fyne_lucide.Icon(fyne_lucide.IconUnderline), pdf.ToolUnderline},
+	{"Strikethrough", fyne_lucide.Icon(fyne_lucide.IconStrikethrough), pdf.ToolStrikeOut},
+	{"Note", fyne_lucide.Icon(fyne_lucide.IconStickyNote), pdf.ToolNote},
+	{"Text Box", fyne_lucide.Icon(fyne_lucide.IconType), pdf.ToolFreeText},
+	{"Draw", fyne_lucide.Icon(fyne_lucide.IconPencil), pdf.ToolInk},
+	{"Rectangle", fyne_lucide.Icon(fyne_lucide.IconSquare), pdf.ToolRect},
+	{"Ellipse", fyne_lucide.Icon(fyne_lucide.IconCircle), pdf.ToolEllipse},
+	{"Line", fyne_lucide.Icon(fyne_lucide.IconSlash), pdf.ToolLine},
+}
+
+func setEnabled(b *widget.Button, enabled bool) {
+	if enabled {
+		b.Enable()
+	} else {
+		b.Disable()
+	}
 }
 
 // load shows contents in the viewer once it is loaded: at once, or after

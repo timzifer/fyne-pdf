@@ -78,6 +78,9 @@ func (r *pageAreaRenderer) Refresh() {
 	if d.sketch != nil {
 		r.objects = append(r.objects, d.sketch.objects...)
 	}
+	if d.moving != nil && d.moving.outline != nil {
+		r.objects = append(r.objects, d.moving.outline)
+	}
 	r.Layout(r.area.Size())
 }
 

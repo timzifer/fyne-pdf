@@ -254,11 +254,17 @@ func (d *Document) placeFreeText(page int, bounds Rect) {
 // askText asks for a text with a dialog on the widget's window and calls
 // done with it, unless the dialog is cancelled or the text is empty.
 func (d *Document) askText(title string, done func(text string)) {
+	d.askTextWith(title, "", done)
+}
+
+// askTextWith is askText with the entry holding text at first.
+func (d *Document) askTextWith(title, text string, done func(text string)) {
 	w := d.window()
 	if w == nil {
 		return
 	}
 	entry := widget.NewMultiLineEntry()
+	entry.SetText(text)
 	entry.SetMinRowsVisible(4)
 	entry.Wrapping = fyne.TextWrapWord
 	var dlg *dialog.FormDialog

@@ -52,8 +52,9 @@ type (
 		doc *Document
 		// cursor is the pointer for what is under it.
 		cursor desktop.Cursor
-		// selecting is set while a drag selects text.
-		selecting bool
+		// selecting is set while a drag selects text, dragging while any
+		// drag goes on.
+		selecting, dragging bool
 	}
 
 	// pageScroll is the main scroll view. It handles the wheel: Ctrl+wheel
@@ -152,7 +153,8 @@ func (a *pageScroll) Scrolled(ev *fyne.ScrollEvent) {
 	}
 }
 
-// Dragged pans the page, or selects text or draws with a tool.
+// Dragged pans the page, or moves the selected annotation when it starts
+// on it; with a tool, it selects text or draws.
 func (a *pageArea) Dragged(ev *fyne.DragEvent) {
 	d := a.doc
 	switch {
@@ -168,14 +170,23 @@ func (a *pageArea) Dragged(ev *fyne.DragEvent) {
 		}
 		d.extendSketch(ev.Position)
 	default:
+		if !a.dragging && d.startMove(ev.Position.Subtract(ev.Dragged)) || d.moving != nil {
+			d.extendMove(ev.Position)
+			break
+		}
 		d.scrollTo(d.scrollContainer.Offset.Subtract(ev.Dragged))
 	}
+	a.dragging = true
 }
 
 // DragEnd marks the selected text with a text markup tool, or adds what a
 // drawing tool drew.
 func (a *pageArea) DragEnd() {
+	a.dragging = false
 	d := a.doc
+	if d.moving != nil {
+		d.finishMove()
+	}
 	if a.selecting {
 		a.selecting = false
 		d.markSelection()

@@ -44,6 +44,9 @@ func (d *Document) SetTool(t Tool) {
 	d.ClearSelection()
 	d.updateToolButton()
 	d.loadTexts(d.livePages())
+	if d.OnToolChanged != nil {
+		d.OnToolChanged()
+	}
 }
 
 // SelectedText returns the selected text; "" if there is none.

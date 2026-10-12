@@ -49,6 +49,9 @@ type (
 		selected    annotKey
 		hasSelected bool
 		popup       *widget.PopUp
+		// reselect is the annotation to select again once it is read
+		// after a change; nil for none.
+		reselect *annotKey
 	}
 
 	// commentRow is an annotation in the comments panel.
@@ -131,6 +134,12 @@ func (p *commentsPanel) addPage(page int, annots []Annotation) {
 		add(a, 0)
 	}
 	p.doc.updateComments()
+	if k := p.reselect; k != nil && k.page == page {
+		p.reselect = nil
+		if _, ok := p.rows[*k]; ok {
+			p.selectAnnotation(*k)
+		}
+	}
 }
 
 // annotation returns the annotation k names, if it is read.
@@ -211,6 +220,8 @@ func (p *commentsPanel) showPopup(a Annotation) {
 		content.Add(widget.NewSeparator())
 		content.Add(container.NewPadded(container.NewVBox(noteContent(r)...)))
 	}
+	content.Add(widget.NewSeparator())
+	content.Add(d.annotationActions(a))
 	p.popup = widget.NewPopUp(container.NewVScroll(content), c)
 
 	// Beside the annotation, within the window.
@@ -307,7 +318,7 @@ func (r *commentRow) selected() bool {
 }
 
 func (r *commentRow) Tapped(*fyne.PointEvent) {
-	r.panel.doc.selectAnnotation(r.annot, true, false)
+	r.panel.doc.selectAnnotation(r.annot, true, true)
 }
 
 func (r *commentRow) CreateRenderer() fyne.WidgetRenderer {

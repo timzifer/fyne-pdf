@@ -58,7 +58,11 @@ no cgo PDF library, no external binaries.
   document at once as an incremental update, drawn by cera as it will be
   saved; `Undo`/`Redo` (Ctrl+Z, Ctrl+Y), `Modified()`, `OnChanged`,
   `Save(w)` — signed and encrypted documents stay signed and encrypted.
-  `Author`, `AnnotationColor`
+  `Author`, `AnnotationColor`, `OnToolChanged`
+- Editing annotations: the popup of the selected annotation changes its
+  text and its colour or deletes it; a drag with `ToolNone` moves it (text
+  markup stays with its text). `SetAnnotationContents`,
+  `SetAnnotationColor`, `MoveAnnotation`
 - Encrypted PDFs: `LoadFromMemory` asks for the password with a dialog (or
   `PasswordCallback`), `OnLoaded` reports the loaded PDF; `Encrypted()` and
   `Permissions()` (`PermPrint`, `PermCopy`, …) tell what the author allows —
