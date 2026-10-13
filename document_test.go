@@ -319,19 +319,19 @@ func TestDocumentToolbar(t *testing.T) {
 		b.Tapped(&fyne.PointEvent{})
 	}
 
-	tapButton("100%", 6)
+	tapButton("100%", 7)
 	if z := zoomOf(t, d); z != 1 {
 		t.Errorf("zoom after 100%% = %v, want 1", z)
 	}
-	tapButton("fit width", 9)
+	tapButton("fit width", 10)
 	if z := zoomOf(t, d); !approx(z, float64(view.Width/page.Width)) {
 		t.Errorf("zoom after fit width = %v, want %v", z, view.Width/page.Width)
 	}
-	tapButton("fit height", 8)
+	tapButton("fit height", 9)
 	if z := zoomOf(t, d); !approx(z, float64(view.Height/page.Height)) {
 		t.Errorf("zoom after fit height = %v, want %v", z, view.Height/page.Height)
 	}
-	tapButton("fit", 7)
+	tapButton("fit", 8)
 	if z := zoomOf(t, d); !approx(z, math.Min(float64(view.Width/page.Width), float64(view.Height/page.Height))) {
 		t.Errorf("zoom after fit = %v", z)
 	}

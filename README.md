@@ -18,6 +18,11 @@ no cgo PDF library, no external binaries.
   scrolled through without a break (`SetViewMode(pdf.ViewContinuous)` or the
   toolbar button). Only the pages in view get objects and renders, so
   documents with hundreds of pages scroll smoothly
+- Page labels: the page entry in the toolbar and the thumbnails name a
+  page as the document prints it ("iv", "A-3"), with its position beside it
+  ("iv (4 of 212)"); the entry takes a label, or a page number if no page
+  has that label. `PageLabel(page)`, `GoToLabel(label)`;
+  `Source.PageLabel` and `Source.PageByLabel` without the widget
 - Viewer gestures: Ctrl+wheel zoom around the pointer, page turns when
   scrolling past a page's edge (single page mode), drag to pan, double tap
   for fit/100 %; keyboard: Page Up/Down, Space, Home/End, arrow keys,

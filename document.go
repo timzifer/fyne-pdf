@@ -8,7 +8,6 @@ import (
 	"log"
 	"math"
 	"net/url"
-	"strconv"
 	"sync"
 	"time"
 
@@ -146,7 +145,11 @@ type (
 		toolbar            *fyne.Container
 		zoom               binding.Float
 		zoomSlider         *widget.Slider
-		scrollContainer    *pageScroll
+		// pageEntry names the current page and takes the page to go to;
+		// pagePosition says where the page is in the document.
+		pageEntry       *widget.Entry
+		pagePosition    *widget.Label
+		scrollContainer *pageScroll
 
 		toggleThumbnailsButton *widget.Button
 		outlineButton          *widget.Button
@@ -162,7 +165,11 @@ type (
 		viewMode ViewMode
 		// pageSizes are the sizes of all pages at zoom 1.
 		pageSizes []fyne.Size
-		layout    pageLayout
+		// pageLabels are the labels of all pages, "" for a page without;
+		// labelled says that one has a label.
+		pageLabels []string
+		labelled   bool
+		layout     pageLayout
 		// views shows the pages in or next to the view, by page; spareViews
 		// are views to reuse.
 		views      map[int]*Page
@@ -390,6 +397,7 @@ func NewDocument() *Document {
 
 	d.toolbar.Add(d.outlineButton)
 	d.toolbar.Add(d.toggleThumbnailsButton)
+	d.toolbar.Add(d.newPageEntry())
 	d.toolbar.Add(layout.NewSpacer())
 	d.toolbar.Add(d.zoomOutButton)
 	sliderWidth := canvas.NewRectangle(color.Transparent)
@@ -755,6 +763,8 @@ func (d *Document) load(src *Source) {
 	scale := d.canvasScale()
 
 	d.pageSizes = make([]fyne.Size, numPages)
+	d.pageLabels = make([]string, numPages)
+	d.labelled = false
 	d.thumbnails = make([]*Thumbnail, numPages)
 	objects := make([]fyne.CanvasObject, numPages)
 	dpis := make([]float64, numPages)
@@ -765,8 +775,11 @@ func (d *Document) load(src *Source) {
 			Height: float32(float64(bounds[i].Dy()) * unitsPerPoint),
 		}
 
+		d.pageLabels[i] = src.PageLabel(i)
+		d.labelled = d.labelled || d.pageLabels[i] != ""
+
 		thumbnail := NewThumbnail()
-		thumbnail.SetTitle(strconv.Itoa(pageNumber + 1))
+		thumbnail.SetTitle(d.pageCaption(i))
 		thumbnail.SetSelected(i == 0)
 		thumbnail.OnTapped = func() {
 			d.ShowPage(pageNumber)
@@ -796,6 +809,8 @@ func (d *Document) load(src *Source) {
 
 	d.thumbnailDPIs = dpis
 	d.renderThumbnails(src, ctx, -1)
+
+	d.updatePageEntry()
 
 	d.clearViews()
 	d.fitHorizontal, d.fitVertical = true, true
@@ -853,6 +868,7 @@ func (d *Document) setCurrent(page int) {
 	}
 	d.revealThumbnail(page)
 	d.outline.markCurrent()
+	d.updatePageEntry()
 }
 
 // revealThumbnail scrolls the thumbnail strip so the thumbnail of page is
