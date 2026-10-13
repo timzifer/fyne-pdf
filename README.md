@@ -18,6 +18,12 @@ no cgo PDF library, no external binaries.
   scrolled through without a break (`SetViewMode(pdf.ViewContinuous)` or the
   toolbar button). Only the pages in view get objects and renders, so
   documents with hundreds of pages scroll smoothly
+- A PDF is opened the way it asks: at the page and view of its open
+  action, with all pages one below the other for the layout "OneColumn",
+  with the outline for the page mode "UseOutlines" (`FollowViewSettings`,
+  on by default; `ViewSettings()` for what the PDF says). Full screen is
+  never entered by the widget, and the layouts in two columns and the
+  right-to-left page order are reported but not built
 - Page labels: the page entry in the toolbar and the thumbnails name a
   page as the document prints it ("iv", "A-3"), with its position beside it
   ("iv (4 of 212)"); the entry takes a label, or a page number if no page
@@ -170,7 +176,9 @@ Edit > Find (Ctrl+F) opens a search bar with options and a result count;
 the results are listed beside the pages ([search.go](examples/viewer/search.go)).
 View > Back and Forward return to the view a link or an outline entry was
 followed from; the line below the pages says what the link under the
-pointer does. View > Link Borders switches the link borders on and off. Documents with
+pointer does. View > Link Borders switches the link borders on and off, View
+> Full Screen the full screen, which a document that asks for it is offered.
+Documents with
 bookmarks open with the outline beside the pages. An encrypted PDF
 asks for its password; File > Print is disabled when it does not allow
 printing.
