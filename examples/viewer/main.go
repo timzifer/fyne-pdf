@@ -56,9 +56,10 @@ type viewer struct {
 	// fynePrintDialog selects fyneprint's dialog over the platform's.
 	fynePrintDialog bool
 
-	mainMenu  *fyne.MainMenu
-	printItem *fyne.MenuItem
-	copyItem  *fyne.MenuItem
+	mainMenu       *fyne.MainMenu
+	printItem      *fyne.MenuItem
+	copyItem       *fyne.MenuItem
+	fullScreenItem *fyne.MenuItem
 	// windowTitle is the window title without the mark of changes.
 	windowTitle string
 	// onLoaded, if set, runs once the next PDF is loaded.
@@ -120,6 +121,9 @@ func main() {
 	// View > Link Borders draws the boxes hyperref puts around links, as
 	// Acrobat and Firefox do.
 	linkBordersItem := fyne.NewMenuItem("Link Borders", nil)
+	// View > Full Screen; a document that asks for it is offered it, see
+	// loaded.
+	v.fullScreenItem = fyne.NewMenuItem("Full Screen", func() { v.setFullScreen(!w.FullScreen()) })
 	undoItem := fyne.NewMenuItem("Undo (Ctrl+Z)", v.doc.Undo)
 	redoItem := fyne.NewMenuItem("Redo (Ctrl+Y)", v.doc.Redo)
 	// The tools are in the Annotate menu and in the bar above the pages.
@@ -143,7 +147,7 @@ func main() {
 	mainMenu := fyne.NewMainMenu(
 		fyne.NewMenu("File", openItem, printItem),
 		fyne.NewMenu("Edit", undoItem, redoItem, fyne.NewMenuItemSeparator(), copyItem, fyne.NewMenuItemSeparator(), findItem, nextItem, previousItem),
-		fyne.NewMenu("View", linkBordersItem),
+		fyne.NewMenu("View", linkBordersItem, v.fullScreenItem),
 		annotateMenu,
 	)
 	// The menus and the bar follow the tool and the history.
@@ -283,10 +287,28 @@ func (v *viewer) loaded(contents []byte, name string) {
 	v.copyItem.Disabled = v.doc.Permissions()&pdf.PermCopy == 0
 	v.mainMenu.Refresh()
 
+	// The widget follows what the document asks for but full screen,
+	// which is the user's to decide.
+	if v.doc.ViewSettings().PageMode == "FullScreen" && !v.window.FullScreen() {
+		dialog.ShowConfirm("Full screen", "The document asks to be shown in full screen.", func(ok bool) {
+			if ok {
+				v.setFullScreen(true)
+			}
+		}, v.window)
+	}
+
 	if f := v.onLoaded; f != nil {
 		v.onLoaded = nil
 		f()
 	}
+}
+
+// setFullScreen shows the window in full screen or ends it; View > Full
+// Screen is checked meanwhile.
+func (v *viewer) setFullScreen(full bool) {
+	v.window.SetFullScreen(full)
+	v.fullScreenItem.Checked = full
+	v.mainMenu.Refresh()
 }
 
 // showPrintDialog prints the open PDF after the user confirmed the print

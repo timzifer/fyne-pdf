@@ -112,6 +112,14 @@ type (
 		// loaded: by LoadFromMemory, or once the password asked for by
 		// its dialog has been entered.
 		OnLoaded func()
+		// FollowViewSettings opens a PDF the way it asks, see
+		// [Document.ViewSettings]: at the page and view it names, with
+		// all pages one below the other for "OneColumn" and with the
+		// outline panel for "UseOutlines". NewDocument sets it; an
+		// application that restores a view of its own switches it off.
+		// The settings are applied before OnLoaded is called, so that
+		// what OnLoaded does with the view stays.
+		FollowViewSettings bool
 		// OnLinkTapped, if set, is called when a link on a page is
 		// tapped; returning true means it handled the link. Otherwise the
 		// widget goes to the link's destination, or opens its URI in the
@@ -253,6 +261,7 @@ func NewDocument() *Document {
 		toolbar:            container.NewHBox(),
 		zoom:               binding.NewFloat(),
 		runOnMain:          fyne.Do,
+		FollowViewSettings: true,
 		modifiers:          currentKeyModifiers,
 		openURL:            func(u *url.URL) error { return fyne.CurrentApp().OpenURL(u) },
 		scale:              1,
@@ -485,6 +494,7 @@ func (d *Document) LoadFromMemory(contents []byte) error {
 func (d *Document) loaded(src *Source) {
 	d.history.reset(src.contents, src.password)
 	d.load(src)
+	d.followViewSettings(src)
 	if d.OnLoaded != nil {
 		d.OnLoaded()
 	}
