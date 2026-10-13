@@ -74,6 +74,9 @@ no cgo PDF library, no external binaries.
   `Permissions()` (`PermPrint`, `PermCopy`, …) tell what the author allows —
   enforcing it is up to the application. `OpenSourceWithPassword`,
   `ErrPassword` and `ErrUnsupportedEncryption` for use without the widget
+- Document properties: `Metadata()` and `SetMetadata(m)` — title, author,
+  subject, keywords, dates; the information dictionary and the XMP packet
+  are written in agreement, as a step of undo. `PageSize(page)` in points
 - Optional save button via `SaveCallback`, render errors via `OnError`
 - `Source`: goroutine-safe access to an opened PDF — page count, page bounds,
   rendering at arbitrary DPI (`RenderPageOptions` for link borders), document metadata, page text and search
@@ -153,6 +156,11 @@ File > Print (Ctrl+P) prints through [goprint](https://github.com/timzifer/gopri
 `-print-dialog native` (the default) shows the platform's print dialog,
 `-print-dialog fyne` the dialog `fyneprint` draws with Fyne, with a preview
 and a "Save as PDF" button.
+
+File > Properties (Ctrl+D) shows the metadata of the document, the size of
+the current page and what an encrypted document permits; title, author,
+subject and keywords can be changed where the document allows changes. The
+window is titled with the title alone if the document asks for that.
 
 Edit > Find (Ctrl+F) opens a search bar with options and a result count;
 the results are listed beside the pages ([search.go](examples/viewer/search.go)).
