@@ -21,7 +21,9 @@ no cgo PDF library, no external binaries.
 - Viewer gestures: Ctrl+wheel zoom around the pointer, page turns when
   scrolling past a page's edge (single page mode), drag to pan, double tap
   for fit/100 %; keyboard: Page Up/Down, Space, Home/End, arrow keys,
-  Ctrl +/-/0
+  Ctrl +/-/0. Pinch to zoom with two fingers on Android and iOS, around the
+  point between them; on Windows a pinch on a precision touchpad zooms as
+  Ctrl+wheel does
 - Rendering in the background, the UI never waits for a page; pages in view
   first, then their neighbours; the resolution of the main view follows the
   zoom level and the screen scale, the page images kept share a memory
@@ -192,7 +194,8 @@ img, err := src.RenderPage(0, 300) // 300 dpi
 ## Status
 
 Usable, but young. The API may still change before v1.0.0.
-Not supported yet: text selection, search, links, annotations.
+Not supported yet: pinch to zoom on macOS and Linux, where Fyne does not
+pass on the gesture ([#23](https://github.com/timzifer/fyne-pdf/issues/23)).
 
 ## Contributing
 

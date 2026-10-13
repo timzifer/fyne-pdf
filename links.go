@@ -151,8 +151,10 @@ var (
 	_ desktop.Cursorable = (*pageArea)(nil)
 )
 
-// MouseIn and MouseMoved choose the pointer for what is under it.
+// MouseIn and MouseMoved choose the pointer for what is under it. With the
+// pointer over the pages, their window is watched for pinches.
 func (a *pageArea) MouseIn(ev *desktop.MouseEvent) {
+	a.doc.watchWindow()
 	a.MouseMoved(ev)
 }
 
