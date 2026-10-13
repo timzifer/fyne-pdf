@@ -42,10 +42,18 @@ no cgo PDF library, no external binaries.
   goes to the entry's destination, the entry of the current page is marked.
   `Outline()` and `GoTo(Destination)` (XYZ, Fit, FitH, FitV, FitR) for
   your own navigation
-- Links: a tap on a link goes to its destination in the document or opens
-  its URI in the browser, the pointer turns into a hand over it;
-  `OnLinkTapped` to handle links yourself (links to other files are not
-  followed). `Source.Links(page)` for the links of a page
+- Links: a tap on a link goes to its destination in the document, opens
+  its URI in the browser, or follows its named action (next, previous,
+  first, last page; back and forward; print through `OnPrint`); the
+  pointer turns into a hand over it. A link to another PDF is opened by
+  the system after a question that names the file (`Dir` for names
+  relative to the document). Nothing is ever started, run or sent: for
+  such links `Link.Description()` says what they would do, and
+  `OnLinkHovered` reports the link under the pointer for a status line.
+  `OnLinkTapped` to handle links yourself, `Source.Links(page)` for the
+  links of a page
+- Back and forward: `GoBack` / `GoForward` (Alt+Left, Alt+Right) return to
+  the view — page, zoom, place — left by a link, an outline entry or `GoTo`
 - Comments: a side panel lists the annotations of the document — author,
   date, text, replies indented, review state as a badge (`ShowComments`,
   toolbar button once there are any). A tap on a row goes to the
@@ -155,7 +163,9 @@ and a "Save as PDF" button.
 
 Edit > Find (Ctrl+F) opens a search bar with options and a result count;
 the results are listed beside the pages ([search.go](examples/viewer/search.go)).
-View > Link Borders switches the link borders on and off. Documents with
+View > Back and Forward return to the view a link or an outline entry was
+followed from; the line below the pages says what the link under the
+pointer does. View > Link Borders switches the link borders on and off. Documents with
 bookmarks open with the outline beside the pages. An encrypted PDF
 asks for its password; File > Print is disabled when it does not allow
 printing.
