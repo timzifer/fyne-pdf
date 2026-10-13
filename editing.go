@@ -128,7 +128,7 @@ func (d *Document) edit(page int, failed string, edit func(e *cera.Editor) error
 	out, err := src.update(edit)
 	if err == nil {
 		var next *Source
-		next, err = OpenSourceWithPassword(out, d.history.password)
+		next, err = d.open(out, d.history.password)
 		if err == nil {
 			d.history.push(out, page)
 			d.swapSource(next, page)
@@ -173,7 +173,7 @@ func (d *Document) Redo() {
 // showVersion shows version i of the history; page is the page that
 // differs from the version shown.
 func (d *Document) showVersion(i, page int) {
-	src, err := OpenSourceWithPassword(d.history.versions[i].bytes(), d.history.password)
+	src, err := d.open(d.history.versions[i].bytes(), d.history.password)
 	if err != nil {
 		d.reportError(max(page, 0), err)
 		return
@@ -220,7 +220,7 @@ func (d *Document) Save(w io.Writer) error {
 	if len(out) != len(data) || !bytes.Equal(out, data) {
 		// A new file: shown from now on, so that the indices of the
 		// annotations are those of the file. It cannot be undone.
-		src, err := OpenSourceWithPassword(out, d.history.password)
+		src, err := d.open(out, d.history.password)
 		if err == nil {
 			d.history.reset(out, d.history.password)
 			d.swapSource(src, allPages)

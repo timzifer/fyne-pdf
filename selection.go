@@ -234,10 +234,10 @@ func (d *Document) updateToolButton() {
 	d.toolButton.Refresh()
 }
 
-// cursor is the pointer over pos in the page area: a hand over a link, an
-// I-beam over text while selecting it.
+// cursor is the pointer over pos in the page area: a hand over a link a
+// tap follows, an I-beam over text while selecting it.
 func (d *Document) cursor(pos fyne.Position) desktop.Cursor {
-	if _, ok := d.linkAt(pos); ok {
+	if l, ok := d.linkAt(pos); ok && d.follows(&l) {
 		return desktop.PointerCursor
 	}
 	if d.tool.selectsText() && d.overText(pos) {

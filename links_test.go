@@ -88,7 +88,11 @@ func TestDocumentFollowLinks(t *testing.T) {
 	if len(opened) != 1 || opened[0] != "https://example.com/" {
 		t.Errorf("web link opened %v", opened)
 	}
-	tap(200, 360) // other file: not followed
+	tap(200, 360) // other file: asked first
+	if d.fileDialog == nil {
+		t.Fatal("no question before opening another file")
+	}
+	d.fileDialog.Dismiss()
 	tap(400, 400) // no link
 	if len(opened) != 1 || d.CurrentPage() != 0 {
 		t.Errorf("tap beside the links: opened %v, page %d", opened, d.CurrentPage())
