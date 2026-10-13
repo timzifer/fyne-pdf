@@ -187,11 +187,13 @@ func (d *Document) updateOutlineButton() {
 
 // GoTo shows dest: it makes its page current, and zooms and scrolls as its
 // kind of view says. A destination out of range is ignored.
+// [Document.GoBack] returns to the view left.
 func (d *Document) GoTo(dest Destination) {
 	page := dest.Page
 	if page < 0 || page >= d.PageCount() {
 		return
 	}
+	d.rememberView()
 	x, y := dest.X, dest.Y
 	d.turnPage(page, false)
 	d.setCurrent(page)

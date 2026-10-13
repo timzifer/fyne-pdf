@@ -9,6 +9,13 @@ import (
 	"github.com/timzifer/cera"
 )
 
+// What a version of the document differs on from the one before, where it
+// is not one page: all of its pages, or nothing the pages show.
+const (
+	allPages = -1
+	noPage   = -2
+)
+
 type (
 	// docVersion is a version of the document's file: the first n bytes
 	// of *data. The versions made by incremental updates share data, each
@@ -16,8 +23,8 @@ type (
 	docVersion struct {
 		data *[]byte
 		n    int
-		// page is the page the change to this version was made on; -1
-		// for the first version.
+		// page is the page the change to this version was made on, or
+		// noPage; allPages for the first version.
 		page int
 	}
 
@@ -39,7 +46,7 @@ func (v docVersion) bytes() []byte {
 // reset starts the history with contents.
 func (h *editHistory) reset(contents []byte, password string) {
 	data := contents[:len(contents):len(contents)]
-	h.versions = []docVersion{{data: &data, n: len(data), page: -1}}
+	h.versions = []docVersion{{data: &data, n: len(data), page: allPages}}
 	h.pos, h.saved, h.password = 0, 0, password
 }
 
@@ -100,6 +107,13 @@ func (s *Source) update(edit func(e *cera.Editor) error) ([]byte, error) {
 // editPage applies edit, a change of the annotations of page, makes the
 // result the version shown, and reports an error through OnError.
 func (d *Document) editPage(page int, edit func(e *cera.Editor) error) bool {
+	return d.edit(page, "could not change the annotations", edit)
+}
+
+// edit applies edit, a change of page (or allPages, noPage), makes the
+// result the version shown, and reports an error through OnError as
+// failed.
+func (d *Document) edit(page int, failed string, edit func(e *cera.Editor) error) bool {
 	src := d.loadedSource()
 	if src == nil {
 		return false
@@ -114,7 +128,7 @@ func (d *Document) editPage(page int, edit func(e *cera.Editor) error) bool {
 	out, err := src.update(edit)
 	if err == nil {
 		var next *Source
-		next, err = OpenSourceWithPassword(out, d.history.password)
+		next, err = d.open(out, d.history.password)
 		if err == nil {
 			d.history.push(out, page)
 			d.swapSource(next, page)
@@ -122,7 +136,7 @@ func (d *Document) editPage(page int, edit func(e *cera.Editor) error) bool {
 			return true
 		}
 	}
-	d.reportError(page, errors.Wrap(err, "could not change the annotations"))
+	d.reportError(max(page, 0), errors.Wrap(err, failed))
 	return false
 }
 
@@ -159,7 +173,7 @@ func (d *Document) Redo() {
 // showVersion shows version i of the history; page is the page that
 // differs from the version shown.
 func (d *Document) showVersion(i, page int) {
-	src, err := OpenSourceWithPassword(d.history.versions[i].bytes(), d.history.password)
+	src, err := d.open(d.history.versions[i].bytes(), d.history.password)
 	if err != nil {
 		d.reportError(max(page, 0), err)
 		return
@@ -206,10 +220,10 @@ func (d *Document) Save(w io.Writer) error {
 	if len(out) != len(data) || !bytes.Equal(out, data) {
 		// A new file: shown from now on, so that the indices of the
 		// annotations are those of the file. It cannot be undone.
-		src, err := OpenSourceWithPassword(out, d.history.password)
+		src, err := d.open(out, d.history.password)
 		if err == nil {
 			d.history.reset(out, d.history.password)
-			d.swapSource(src, -1)
+			d.swapSource(src, allPages)
 		}
 	}
 	d.history.saved = d.history.pos
@@ -225,9 +239,9 @@ func (d *Document) changed() {
 }
 
 // swapSource shows src, a version of the document that differs from the
-// one shown on page (-1: on any), keeping the view: the current page, the
-// zoom, the scroll offset, the tool. The images of other pages are kept;
-// that of page is shown until it is rendered again.
+// one shown on page (or allPages, noPage), keeping the view: the current
+// page, the zoom, the scroll offset, the tool. The images of other pages
+// are kept; that of page is shown until it is rendered again.
 func (d *Document) swapSource(src *Source, page int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	d.mutex.Lock()
@@ -240,11 +254,11 @@ func (d *Document) swapSource(src *Source, page int) {
 	d.jobs, d.rendering, d.inflightCancel = nil, false, nil
 	d.failed = map[int]float64{}
 	for p, r := range d.rendered {
-		if page < 0 || p == page {
+		if page == allPages || p == page {
 			r.stale = true
 		}
 	}
-	if page < 0 {
+	if page == allPages {
 		d.links, d.texts = map[int][]Link{}, map[int]*cera.PageText{}
 	} else {
 		delete(d.links, page)
@@ -262,7 +276,9 @@ func (d *Document) swapSource(src *Source, page int) {
 	d.comments.reset()
 	d.attachments.reset(src.Attachments())
 	d.loadAnnotations(src, ctx, src.PageCount())
-	d.renderThumbnails(src, ctx, page)
+	if page != noPage {
+		d.renderThumbnails(src, ctx, page)
+	}
 	if d.search.running {
 		d.Search(d.search.query, d.search.opt)
 	}

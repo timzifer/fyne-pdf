@@ -35,11 +35,14 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/storage"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/timzifer/cera/fonts/system"
 	pdf "github.com/timzifer/fyne-pdf"
 	"github.com/timzifer/fyne_lucide"
 	"github.com/timzifer/goprint"
@@ -87,6 +90,13 @@ func main() {
 	// All pages one below the other; the toolbar switches to single pages.
 	v.doc.SetViewMode(pdf.ViewContinuous)
 
+	// Fonts a PDF names but does not embed are those of the machine, if it
+	// has them. One provider for the program: it reads the font
+	// directories once, here in the background.
+	fonts := system.New()
+	go fonts.Faces()
+	v.doc.Fonts = fonts
+
 	// Render errors arrive on the main goroutine; a broken page should not
 	// end the program.
 	v.doc.OnError = func(page int, err error) {
@@ -104,6 +114,10 @@ func main() {
 			v.showPrintDialog()
 		}
 	})
+	// File > Properties (Ctrl+D) shows and edits the metadata.
+	propertiesItem := fyne.NewMenuItem("Properties…", v.showProperties)
+	propertiesItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyD, Modifier: fyne.KeyModifierShortcutDefault}
+	w.Canvas().AddShortcut(propertiesItem.Shortcut, func(fyne.Shortcut) { v.showProperties() })
 
 	// Edit > Find (Ctrl+F) shows the search bar; F3 and Shift+F3 go to the
 	// next and previous result, in the search bar and in the document.
@@ -124,6 +138,26 @@ func main() {
 	// View > Full Screen; a document that asks for it is offered it, see
 	// loaded.
 	v.fullScreenItem = fyne.NewMenuItem("Full Screen", func() { v.setFullScreen(!w.FullScreen()) })
+	// View > Back and Forward return to the views left by a link or an
+	// outline entry.
+	backItem := fyne.NewMenuItem("Back (Alt+Left)", func() { v.doc.GoBack() })
+	forwardItem := fyne.NewMenuItem("Forward (Alt+Right)", func() { v.doc.GoForward() })
+	// A link that asks to print opens the print dialog.
+	v.doc.OnPrint = func() {
+		if !printItem.Disabled {
+			v.showPrintDialog()
+		}
+	}
+	// The line below the pages says what the link under the pointer does.
+	status := canvas.NewText("", theme.Color(theme.ColorNameForeground))
+	status.TextSize = theme.CaptionTextSize()
+	v.doc.OnLinkHovered = func(l *pdf.Link) {
+		status.Text = ""
+		if l != nil {
+			status.Text = l.Description()
+		}
+		status.Refresh()
+	}
 	undoItem := fyne.NewMenuItem("Undo (Ctrl+Z)", v.doc.Undo)
 	redoItem := fyne.NewMenuItem("Redo (Ctrl+Y)", v.doc.Redo)
 	// The tools are in the Annotate menu and in the bar above the pages.
@@ -145,9 +179,9 @@ func main() {
 	toolBar.Add(undoButton)
 	toolBar.Add(redoButton)
 	mainMenu := fyne.NewMainMenu(
-		fyne.NewMenu("File", openItem, printItem),
+		fyne.NewMenu("File", openItem, printItem, fyne.NewMenuItemSeparator(), propertiesItem),
 		fyne.NewMenu("Edit", undoItem, redoItem, fyne.NewMenuItemSeparator(), copyItem, fyne.NewMenuItemSeparator(), findItem, nextItem, previousItem),
-		fyne.NewMenu("View", linkBordersItem, v.fullScreenItem),
+		fyne.NewMenu("View", backItem, forwardItem, fyne.NewMenuItemSeparator(), linkBordersItem, v.fullScreenItem),
 		annotateMenu,
 	)
 	// The menus and the bar follow the tool and the history.
@@ -165,7 +199,8 @@ func main() {
 			toolButtons[i].Refresh()
 		}
 		mainMenu.Refresh()
-		v.showTitle()
+		// The title of the document may be what changed.
+		v.titleWindow()
 	}
 	v.doc.OnChanged = update
 	v.doc.OnToolChanged = update
@@ -193,7 +228,7 @@ func main() {
 	v.mainMenu = mainMenu
 	update()
 
-	w.SetContent(container.NewBorder(container.NewVBox(toolBar, search.bar), nil, nil, nil, search.content))
+	w.SetContent(container.NewBorder(container.NewVBox(toolBar, search.bar), container.NewPadded(status), nil, nil, search.content))
 	w.Resize(fyne.NewSize(1024, 768))
 
 	if path := flag.Arg(0); path != "" {
@@ -211,8 +246,12 @@ func main() {
 		}
 		// Loaded once the window is shown: the password dialog of an
 		// encrypted PDF needs it.
+		dir := ""
+		if abs, err := filepath.Abs(path); err == nil {
+			dir = filepath.Dir(abs)
+		}
 		a.Lifecycle().SetOnStarted(func() {
-			if err := v.load(contents, filepath.Base(path)); err != nil {
+			if err := v.load(contents, filepath.Base(path), dir); err != nil {
 				log.Fatal(err)
 			}
 		})
@@ -254,9 +293,11 @@ func setEnabled(b *widget.Button, enabled bool) {
 }
 
 // load shows contents in the viewer once it is loaded: at once, or after
-// the password dialog of an encrypted PDF.
-func (v *viewer) load(contents []byte, name string) error {
+// the password dialog of an encrypted PDF. dir is the directory the file
+// comes from, for its links to other files; "" if it is not known.
+func (v *viewer) load(contents []byte, name, dir string) error {
 	v.doc.OnLoaded = func() { v.loaded(contents, name) }
+	v.doc.Dir = dir
 	return v.doc.LoadFromMemory(contents)
 }
 
@@ -269,14 +310,7 @@ func (v *viewer) loaded(contents []byte, name string) {
 	v.doc.SaveCallback = v.showSaveDialog
 	v.doc.Refresh()
 
-	title := name
-	v.title = name
-	if t := v.doc.Metadata().Title; t != "" {
-		title = t + " – " + name
-		v.title = t
-	}
-	v.windowTitle = fmt.Sprintf("%s (%d pages)", title, v.doc.PageCount())
-	v.showTitle()
+	v.titleWindow()
 
 	// Documents with bookmarks open with the outline beside the pages.
 	v.doc.ShowOutline(len(v.doc.Outline()) > 0)
@@ -341,7 +375,11 @@ func (v *viewer) showOpenDialog() {
 		defer func() { _ = r.Close() }()
 		contents, err := io.ReadAll(r)
 		if err == nil {
-			err = v.load(contents, r.URI().Name())
+			dir := ""
+			if r.URI().Scheme() == "file" {
+				dir = filepath.Dir(r.URI().Path())
+			}
+			err = v.load(contents, r.URI().Name(), dir)
 		}
 		if err != nil {
 			dialog.ShowError(err, v.window)
@@ -369,6 +407,25 @@ func (v *viewer) showSaveDialog() {
 	}, v.window)
 	d.SetFileName(v.name)
 	d.Show()
+}
+
+// titleWindow titles the window after the document: its title and the name
+// of its file, or the title alone if the document asks for that
+// (DisplayDocTitle).
+func (v *viewer) titleWindow() {
+	if v.contents != nil {
+		title := v.name
+		v.title = v.name
+		if t := v.doc.Metadata().Title; t != "" {
+			title = t + " – " + v.name
+			if v.doc.ViewSettings().DisplayDocTitle {
+				title = t
+			}
+			v.title = t
+		}
+		v.windowTitle = fmt.Sprintf("%s (%d pages)", title, v.doc.PageCount())
+	}
+	v.showTitle()
 }
 
 // showTitle titles the window after the document, marked while it has
