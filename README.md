@@ -18,6 +18,11 @@ no cgo PDF library, no external binaries.
   scrolled through without a break (`SetViewMode(pdf.ViewContinuous)` or the
   toolbar button). Only the pages in view get objects and renders, so
   documents with hundreds of pages scroll smoothly
+- Page labels: the page entry in the toolbar and the thumbnails name a
+  page as the document prints it ("iv", "A-3"), with its position beside it
+  ("iv (4 of 212)"); the entry takes a label, or a page number if no page
+  has that label. `PageLabel(page)`, `GoToLabel(label)`;
+  `Source.PageLabel` and `Source.PageByLabel` without the widget
 - Viewer gestures: Ctrl+wheel zoom around the pointer, page turns when
   scrolling past a page's edge (single page mode), drag to pan, double tap
   for fit/100 %; keyboard: Page Up/Down, Space, Home/End, arrow keys,
@@ -39,10 +44,18 @@ no cgo PDF library, no external binaries.
   goes to the entry's destination, the entry of the current page is marked.
   `Outline()` and `GoTo(Destination)` (XYZ, Fit, FitH, FitV, FitR) for
   your own navigation
-- Links: a tap on a link goes to its destination in the document or opens
-  its URI in the browser, the pointer turns into a hand over it;
-  `OnLinkTapped` to handle links yourself (links to other files are not
-  followed). `Source.Links(page)` for the links of a page
+- Links: a tap on a link goes to its destination in the document, opens
+  its URI in the browser, or follows its named action (next, previous,
+  first, last page; back and forward; print through `OnPrint`); the
+  pointer turns into a hand over it. A link to another PDF is opened by
+  the system after a question that names the file (`Dir` for names
+  relative to the document). Nothing is ever started, run or sent: for
+  such links `Link.Description()` says what they would do, and
+  `OnLinkHovered` reports the link under the pointer for a status line.
+  `OnLinkTapped` to handle links yourself, `Source.Links(page)` for the
+  links of a page
+- Back and forward: `GoBack` / `GoForward` (Alt+Left, Alt+Right) return to
+  the view — page, zoom, place — left by a link, an outline entry or `GoTo`
 - Comments: a side panel lists the annotations of the document — author,
   date, text, replies indented, review state as a badge (`ShowComments`,
   toolbar button once there are any). A tap on a row goes to the
@@ -70,12 +83,19 @@ no cgo PDF library, no external binaries.
   `Permissions()` (`PermPrint`, `PermCopy`, …) tell what the author allows —
   enforcing it is up to the application. `OpenSourceWithPassword`,
   `ErrPassword` and `ErrUnsupportedEncryption` for use without the widget
+- Fonts a PDF names but does not embed: `Document.Fonts` (and
+  `OpenSourceWith`) take a `cera.FontProvider`, such as the fonts of the
+  machine — see [Fonts](#fonts). Without one, cera's stand-ins draw them
 - Optional save button via `SaveCallback`, render errors via `OnError`
 - `Source`: goroutine-safe access to an opened PDF — page count, page bounds,
   rendering at arbitrary DPI (`RenderPageOptions` for link borders), document metadata, page text and search
 - `NewImageFromMemory`: render a single page to an `image.Image` without any UI
 - Render timeout per page (15 s); slow pages fall back to the partially drawn
   image instead of blocking the UI
+- With cera v0.10.0: right-to-left text (Arabic, Hebrew) is read in logical
+  order, so search finds it as it is typed; DeviceCMYK is drawn through the
+  output intent of a PDF/X or PDF/A file, grey and RGB ICC profiles built
+  from lookup tables are read, transfer functions apply to images
 
 ## Installation
 
@@ -83,7 +103,7 @@ no cgo PDF library, no external binaries.
 go get github.com/timzifer/fyne-pdf
 ```
 
-Requires Go 1.27.1+, Fyne 2.6+ (uses `fyne.Do`) and cera v0.9.0+. This
+Requires Go 1.27.1+, Fyne 2.6+ (uses `fyne.Do`) and cera v0.10.0+. This
 module, like cera, replaces `github.com/ajroetker/go-highway` with
 `github.com/timzifer/go-highway v0.0.13-timzifer.1`; replace directives do not
 carry over to dependents, so add the same line to your `go.mod` if you want
@@ -148,7 +168,9 @@ and a "Save as PDF" button.
 
 Edit > Find (Ctrl+F) opens a search bar with options and a result count;
 the results are listed beside the pages ([search.go](examples/viewer/search.go)).
-View > Link Borders switches the link borders on and off. Documents with
+View > Back and Forward return to the view a link or an outline entry was
+followed from; the line below the pages says what the link under the
+pointer does. View > Link Borders switches the link borders on and off. Documents with
 bookmarks open with the outline beside the pages. An encrypted PDF
 asks for its password; File > Print is disabled when it does not allow
 printing.
@@ -171,6 +193,24 @@ The results are highlighted on the pages (`HighlightColor`,
 `Source.PageText` return the results and the text; `Rect`s are in points of
 the displayed page, origin top left. `Page.SetHighlights` marks any areas of
 a page.
+
+### Fonts
+
+A PDF that names "Segoe UI" or "MS Mincho" without embedding it is drawn
+with a stand-in. To use the fonts installed on the machine instead, give the
+widget the provider of cera's `fonts/system` module:
+
+```go
+import "github.com/timzifer/cera/fonts/system"
+
+fonts := system.New() // one for the program: it reads the font directories once, on first use
+doc.Fonts = fonts     // before LoadFromMemory
+```
+
+fyne-pdf does not import `fonts/system` or `fonts/cjk` itself, so the widget
+stays small and the application chooses; several providers combine as
+`cera.FontProviders{system.New(), cjk.Provider{…}}`. A page drawn with the
+fonts of the machine differs between machines.
 
 ### Render a page to an image
 

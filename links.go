@@ -1,7 +1,6 @@
 package pdf
 
 import (
-	"net/url"
 	"slices"
 
 	"fyne.io/fyne/v2"
@@ -10,7 +9,8 @@ import (
 )
 
 // Link is a link on a page: an area that leads to a place in the
-// document, to a URI, or to another file.
+// document, to a URI or to another file, or that asks the viewer to do
+// something. [Link.Description] says in words what it does.
 type Link struct {
 	// Rects are the areas that react, in points (1/72 inch) of the
 	// displayed page from its top left.
@@ -20,10 +20,29 @@ type Link struct {
 	Dest *Destination
 	// URI is the address of a link to the web (or mailto:).
 	URI string
-	// External is set for a link to another file or an application; File
-	// names it. The widget does not follow it.
+	// External is set for a link out of the document: to another PDF
+	// (Action "GoToR"), which the widget opens after the user agreed, to a
+	// file embedded in this or another one ("GoToE", see Embedded) or to a
+	// file or program ("Launch"), which it never opens. File names it.
 	External bool
 	File     string
+	// Embedded is the way to the target of a "GoToE" link, from File, or
+	// from this document when File is empty: the names of embedded files,
+	// each inside the one before.
+	Embedded []string
+	// NamedAction is the name of a command for the viewer: "NextPage",
+	// "PrevPage", "FirstPage" and "LastPage", which the widget follows,
+	// "GoBack" and "GoForward" (see [Document.GoBack]), "Print" (see
+	// Document.OnPrint), or one it does not know.
+	NamedAction string
+	// Action is the type of the action the link was read from: "GoTo",
+	// "GoToR", "GoToE", "Launch", "URI", "Named", or one that is only
+	// reported and never done: "JavaScript", "SubmitForm", "Hide", ... It
+	// is empty for a plain destination.
+	Action string
+
+	// page and index name the link annotation.
+	page, index int
 }
 
 // Contains reports whether the point x, y (in points of the displayed
@@ -37,8 +56,8 @@ func (l *Link) Contains(x, y float64) bool {
 	return false
 }
 
-// Links returns the links of page (0-based) that lead somewhere, in the
-// order of the page's annotations, leaving out hidden ones.
+// Links returns the links of page (0-based) in the order of the page's
+// annotations, leaving out hidden ones.
 func (s *Source) Links(page int) ([]Link, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -57,10 +76,19 @@ func (s *Source) Links(page int) ([]Link, error) {
 	var out []Link
 	for _, l := range p.Links() {
 		link := Link{
-			URI:      l.Target.URI,
-			External: l.Target.External,
-			File:     l.Target.File,
-			Dest:     s.destination(&l.Target),
+			URI:         l.Target.URI,
+			External:    l.Target.External,
+			File:        l.Target.File,
+			Embedded:    l.Target.Embedded,
+			NamedAction: l.Target.NamedAction,
+			Action:      l.Target.Action,
+			page:        page,
+			index:       l.Index,
+		}
+		if !link.External {
+			// The destination of a link out of the document is a place
+			// in the other file.
+			link.Dest = s.destination(&l.Target)
 		}
 		for _, q := range l.Quads {
 			b := q.Bounds()
@@ -129,23 +157,6 @@ func (d *Document) linkAt(pos fyne.Position) (Link, bool) {
 	return links[i], true
 }
 
-// followLink goes where l leads: it asks OnLinkTapped first, if set; then
-// it goes to the destination, or opens the URI in the browser. Links to
-// other files are not followed.
-func (d *Document) followLink(l Link) {
-	if d.OnLinkTapped != nil && d.OnLinkTapped(l) {
-		return
-	}
-	switch {
-	case l.Dest != nil:
-		d.GoTo(*l.Dest)
-	case l.URI != "":
-		if u, err := url.Parse(l.URI); err == nil {
-			_ = d.openURL(u)
-		}
-	}
-}
-
 var (
 	_ desktop.Hoverable  = (*pageArea)(nil)
 	_ desktop.Cursorable = (*pageArea)(nil)
@@ -160,13 +171,20 @@ func (a *pageArea) MouseIn(ev *desktop.MouseEvent) {
 
 func (a *pageArea) MouseMoved(ev *desktop.MouseEvent) {
 	a.cursor = a.doc.cursor(ev.Position)
+	if l, ok := a.doc.linkAt(ev.Position); ok {
+		a.doc.hoverLink(&l)
+	} else {
+		a.doc.hoverLink(nil)
+	}
 }
 
 func (a *pageArea) MouseOut() {
 	a.cursor = desktop.DefaultCursor
+	a.doc.hoverLink(nil)
 }
 
-// Cursor is a hand over a link, an I-beam over text while selecting it.
+// Cursor is a hand over a link that is followed, an I-beam over text
+// while selecting it.
 func (a *pageArea) Cursor() desktop.Cursor {
 	if a.cursor == nil {
 		return desktop.DefaultCursor

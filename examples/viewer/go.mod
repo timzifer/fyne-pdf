@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	fyne.io/fyne/v2 v2.8.1
+	github.com/timzifer/cera/fonts/system v0.0.0-20261013080652-b12ba149dcf0
 	github.com/timzifer/fyne-pdf v0.4.0
 	github.com/timzifer/fyne_lucide v1.2.0
 	github.com/timzifer/goprint v0.5.0
@@ -56,7 +57,7 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tannevaled/gobig2 v0.2.0 // indirect
-	github.com/timzifer/cera v0.9.0 // indirect
+	github.com/timzifer/cera v0.10.0 // indirect
 	github.com/timzifer/fyne_iconkit v0.1.0 // indirect
 	github.com/timzifer/fyne_tabler v1.2.0 // indirect
 	github.com/timzifer/stilus v0.9.0 // indirect

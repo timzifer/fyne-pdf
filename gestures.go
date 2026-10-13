@@ -332,7 +332,7 @@ func (a *pageArea) TypedKey(ev *fyne.KeyEvent) {
 
 // TypedShortcut zooms with Ctrl (Cmd on macOS) and +, - or 0; Ctrl+C
 // copies the selected text, Ctrl+A selects the text of the page with
-// ToolSelect.
+// ToolSelect; Alt+Left and Alt+Right go back and forward after a jump.
 func (a *pageArea) TypedShortcut(s fyne.Shortcut) {
 	switch s.(type) {
 	case *fyne.ShortcutCopy:
@@ -351,10 +351,22 @@ func (a *pageArea) TypedShortcut(s fyne.Shortcut) {
 		return
 	}
 	cs, ok := s.(*desktop.CustomShortcut)
-	if !ok || cs.Modifier&^fyne.KeyModifierShift != fyne.KeyModifierShortcutDefault {
+	if !ok {
 		return
 	}
 	d := a.doc
+	if cs.Modifier == fyne.KeyModifierAlt {
+		switch cs.KeyName {
+		case fyne.KeyLeft:
+			d.GoBack()
+		case fyne.KeyRight:
+			d.GoForward()
+		}
+		return
+	}
+	if cs.Modifier&^fyne.KeyModifierShift != fyne.KeyModifierShortcutDefault {
+		return
+	}
 	center := d.scrollContainer.Size()
 	anchor := fyne.NewPos(center.Width/2, center.Height/2)
 	switch cs.KeyName {

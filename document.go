@@ -8,7 +8,6 @@ import (
 	"log"
 	"math"
 	"net/url"
-	"strconv"
 	"sync"
 	"time"
 
@@ -106,6 +105,10 @@ type (
 		OnToolChanged func()
 		// Author is the author of the annotations made with the tools.
 		Author string
+		// Fonts supplies the fonts a PDF names but does not embed, see
+		// [SourceOptions]; PDFs loaded after it is set use it. If nil,
+		// such fonts are drawn with the stand-ins cera has built in.
+		Fonts cera.FontProvider
 		// AnnotationColor is the colour of the annotations made with the
 		// tools; if nil, yellow for highlights and notes, red for
 		// drawings and shapes, black for underlines and strikethroughs.
@@ -116,9 +119,22 @@ type (
 		OnLoaded func()
 		// OnLinkTapped, if set, is called when a link on a page is
 		// tapped; returning true means it handled the link. Otherwise the
-		// widget goes to the link's destination, or opens its URI in the
-		// browser; it does not follow links to other files.
+		// widget goes to the link's destination, opens its URI in the
+		// browser, or follows its named action; a link to another PDF it
+		// has the system open after the user agreed in a dialog. It never
+		// starts a program, runs a script or sends a form.
 		OnLinkTapped func(Link) bool
+		// OnLinkHovered, if set, is called when the pointer comes over a
+		// link on a page, and with nil when it leaves one, to say what
+		// the link does: see [Link.Description].
+		OnLinkHovered func(*Link)
+		// OnPrint, if set, is called by a link that asks to print the
+		// document; without it such links do nothing.
+		OnPrint func()
+		// Dir is the directory the loaded PDF comes from, for its links to
+		// other PDFs that are named relative to it. The widget loads PDFs
+		// from memory and does not know it; set it with the PDF.
+		Dir string
 		// HighlightColor fills the search results on the pages,
 		// CurrentHighlightColor the current one. If nil, translucent
 		// yellow and orange are used.
@@ -135,7 +151,11 @@ type (
 		toolbar            *fyne.Container
 		zoom               binding.Float
 		zoomSlider         *widget.Slider
-		scrollContainer    *pageScroll
+		// pageEntry names the current page and takes the page to go to;
+		// pagePosition says where the page is in the document.
+		pageEntry       *widget.Entry
+		pagePosition    *widget.Label
+		scrollContainer *pageScroll
 
 		toggleThumbnailsButton *widget.Button
 		outlineButton          *widget.Button
@@ -151,7 +171,11 @@ type (
 		viewMode ViewMode
 		// pageSizes are the sizes of all pages at zoom 1.
 		pageSizes []fyne.Size
-		layout    pageLayout
+		// pageLabels are the labels of all pages, "" for a page without;
+		// labelled says that one has a label.
+		pageLabels []string
+		labelled   bool
+		layout     pageLayout
 		// views shows the pages in or next to the view, by page; spareViews
 		// are views to reuse.
 		views      map[int]*Page
@@ -199,6 +223,12 @@ type (
 		openURL func(*url.URL) error
 		// history are the versions of the file, one per change.
 		history editHistory
+		// jumps are the views to go back and forward to; hovered is the
+		// link under the pointer; fileDialog asks whether to open the
+		// file a link leads to.
+		jumps      viewHistory
+		hovered    *Link
+		fileDialog *dialog.ConfirmDialog
 		// search is the state of the search, see Document.Search.
 		search documentSearch
 		// modifiers returns the key modifiers held; replaced in tests.
@@ -377,6 +407,7 @@ func NewDocument() *Document {
 
 	d.toolbar.Add(d.outlineButton)
 	d.toolbar.Add(d.toggleThumbnailsButton)
+	d.toolbar.Add(d.newPageEntry())
 	d.toolbar.Add(layout.NewSpacer())
 	d.toolbar.Add(d.zoomOutButton)
 	sliderWidth := canvas.NewRectangle(color.Transparent)
@@ -471,7 +502,7 @@ func (d *Document) closeLocked() error {
 // [ErrPassword].
 func (d *Document) LoadFromMemory(contents []byte) error {
 	d.cancelPassword()
-	src, err := OpenSource(contents)
+	src, err := d.open(contents, "")
 	if errors.Is(err, ErrPassword) {
 		if d.PasswordCallback != nil {
 			src, err = d.askPassword(contents)
@@ -487,9 +518,17 @@ func (d *Document) LoadFromMemory(contents []byte) error {
 	return nil
 }
 
+// open opens contents, a PDF or a version of the one loaded, with the
+// options of the widget.
+func (d *Document) open(contents []byte, password string) (*Source, error) {
+	return OpenSourceWith(contents, SourceOptions{Password: password, Fonts: d.Fonts})
+}
+
 // loaded shows src and tells OnLoaded.
 func (d *Document) loaded(src *Source) {
 	d.history.reset(src.contents, src.password)
+	d.jumps = viewHistory{}
+	d.hoverLink(nil)
 	d.load(src)
 	if d.OnLoaded != nil {
 		d.OnLoaded()
@@ -503,7 +542,7 @@ func (d *Document) askPassword(contents []byte) (*Source, error) {
 		if !ok {
 			return nil, errors.Wrap(ErrPassword, "no password given")
 		}
-		src, err := OpenSourceWithPassword(contents, password)
+		src, err := d.open(contents, password)
 		if !errors.Is(err, ErrPassword) {
 			return src, err
 		}
@@ -530,7 +569,7 @@ func (d *Document) showPasswordDialog(w fyne.Window, contents []byte, load int, 
 		if !ok {
 			return
 		}
-		src, err := OpenSourceWithPassword(contents, entry.Text)
+		src, err := d.open(contents, entry.Text)
 		switch {
 		case errors.Is(err, ErrPassword):
 			d.showPasswordDialog(w, contents, load, true)
@@ -741,6 +780,8 @@ func (d *Document) load(src *Source) {
 	scale := d.canvasScale()
 
 	d.pageSizes = make([]fyne.Size, numPages)
+	d.pageLabels = make([]string, numPages)
+	d.labelled = false
 	d.thumbnails = make([]*Thumbnail, numPages)
 	objects := make([]fyne.CanvasObject, numPages)
 	dpis := make([]float64, numPages)
@@ -751,8 +792,11 @@ func (d *Document) load(src *Source) {
 			Height: float32(float64(bounds[i].Dy()) * unitsPerPoint),
 		}
 
+		d.pageLabels[i] = src.PageLabel(i)
+		d.labelled = d.labelled || d.pageLabels[i] != ""
+
 		thumbnail := NewThumbnail()
-		thumbnail.SetTitle(strconv.Itoa(pageNumber + 1))
+		thumbnail.SetTitle(d.pageCaption(i))
 		thumbnail.SetSelected(i == 0)
 		thumbnail.OnTapped = func() {
 			d.ShowPage(pageNumber)
@@ -782,6 +826,8 @@ func (d *Document) load(src *Source) {
 
 	d.thumbnailDPIs = dpis
 	d.renderThumbnails(src, ctx, -1)
+
+	d.updatePageEntry()
 
 	d.clearViews()
 	d.fitHorizontal, d.fitVertical = true, true
@@ -839,6 +885,7 @@ func (d *Document) setCurrent(page int) {
 	}
 	d.revealThumbnail(page)
 	d.outline.markCurrent()
+	d.updatePageEntry()
 }
 
 // revealThumbnail scrolls the thumbnail strip so the thumbnail of page is
