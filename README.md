@@ -74,6 +74,10 @@ no cgo PDF library, no external binaries.
 - `NewImageFromMemory`: render a single page to an `image.Image` without any UI
 - Render timeout per page (15 s); slow pages fall back to the partially drawn
   image instead of blocking the UI
+- With cera v0.10.0: right-to-left text (Arabic, Hebrew) is read in logical
+  order, so search finds it as it is typed; DeviceCMYK is drawn through the
+  output intent of a PDF/X or PDF/A file, grey and RGB ICC profiles built
+  from lookup tables are read, transfer functions apply to images
 
 ## Installation
 
@@ -81,7 +85,7 @@ no cgo PDF library, no external binaries.
 go get github.com/timzifer/fyne-pdf
 ```
 
-Requires Go 1.27.1+, Fyne 2.6+ (uses `fyne.Do`) and cera v0.9.0+. This
+Requires Go 1.27.1+, Fyne 2.6+ (uses `fyne.Do`) and cera v0.10.0+. This
 module, like cera, replaces `github.com/ajroetker/go-highway` with
 `github.com/timzifer/go-highway v0.0.13-timzifer.1`; replace directives do not
 carry over to dependents, so add the same line to your `go.mod` if you want
