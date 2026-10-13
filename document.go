@@ -64,7 +64,9 @@ type (
 	// takes the keyboard focus: Page Up/Down and Space scroll by a screen,
 	// Home/End go to the first and last page, the arrow keys scroll
 	// (Left/Right go to the previous and next page while the pages fit
-	// horizontally), Ctrl +/-/0 zoom.
+	// horizontally), Ctrl +/-/0 zoom. On a touch screen (Android, iOS) two
+	// fingers pinch to zoom around the point between them; on Windows a
+	// pinch on a precision touchpad zooms as Ctrl+wheel does.
 	//
 	// [Document.Search] finds text in the background and highlights the
 	// results on the pages; F3 and Shift+F3 go to the next and previous one.
@@ -192,6 +194,10 @@ type (
 		// fitScale is the zoom the last fit set.
 		fitHorizontal, fitVertical bool
 		fitScale                   float64
+		// pinch is the pinch gesture in progress, nil if there is none;
+		// watched is the canvas whose window reports pinches.
+		pinch   *pinch
+		watched fyne.Canvas
 		// loads counts the calls of LoadFromMemory and Close; a password
 		// dialog answered after another one is ignored.
 		loads int
@@ -769,6 +775,7 @@ func (d *Document) load(src *Source) {
 	d.texts = map[int]*cera.PageText{}
 	d.mutex.Unlock()
 	d.selection = nil
+	d.pinch = nil
 
 	scale := d.canvasScale()
 
