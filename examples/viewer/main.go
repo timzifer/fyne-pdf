@@ -114,6 +114,10 @@ func main() {
 			v.showPrintDialog()
 		}
 	})
+	// File > Properties (Ctrl+D) shows and edits the metadata.
+	propertiesItem := fyne.NewMenuItem("Properties…", v.showProperties)
+	propertiesItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyD, Modifier: fyne.KeyModifierShortcutDefault}
+	w.Canvas().AddShortcut(propertiesItem.Shortcut, func(fyne.Shortcut) { v.showProperties() })
 
 	// Edit > Find (Ctrl+F) shows the search bar; F3 and Shift+F3 go to the
 	// next and previous result, in the search bar and in the document.
@@ -175,7 +179,7 @@ func main() {
 	toolBar.Add(undoButton)
 	toolBar.Add(redoButton)
 	mainMenu := fyne.NewMainMenu(
-		fyne.NewMenu("File", openItem, printItem),
+		fyne.NewMenu("File", openItem, printItem, fyne.NewMenuItemSeparator(), propertiesItem),
 		fyne.NewMenu("Edit", undoItem, redoItem, fyne.NewMenuItemSeparator(), copyItem, fyne.NewMenuItemSeparator(), findItem, nextItem, previousItem),
 		fyne.NewMenu("View", backItem, forwardItem, fyne.NewMenuItemSeparator(), linkBordersItem, v.fullScreenItem),
 		annotateMenu,
@@ -195,7 +199,8 @@ func main() {
 			toolButtons[i].Refresh()
 		}
 		mainMenu.Refresh()
-		v.showTitle()
+		// The title of the document may be what changed.
+		v.titleWindow()
 	}
 	v.doc.OnChanged = update
 	v.doc.OnToolChanged = update
@@ -305,14 +310,7 @@ func (v *viewer) loaded(contents []byte, name string) {
 	v.doc.SaveCallback = v.showSaveDialog
 	v.doc.Refresh()
 
-	title := name
-	v.title = name
-	if t := v.doc.Metadata().Title; t != "" {
-		title = t + " – " + name
-		v.title = t
-	}
-	v.windowTitle = fmt.Sprintf("%s (%d pages)", title, v.doc.PageCount())
-	v.showTitle()
+	v.titleWindow()
 
 	// Documents with bookmarks open with the outline beside the pages.
 	v.doc.ShowOutline(len(v.doc.Outline()) > 0)
@@ -409,6 +407,25 @@ func (v *viewer) showSaveDialog() {
 	}, v.window)
 	d.SetFileName(v.name)
 	d.Show()
+}
+
+// titleWindow titles the window after the document: its title and the name
+// of its file, or the title alone if the document asks for that
+// (DisplayDocTitle).
+func (v *viewer) titleWindow() {
+	if v.contents != nil {
+		title := v.name
+		v.title = v.name
+		if t := v.doc.Metadata().Title; t != "" {
+			title = t + " – " + v.name
+			if v.doc.ViewSettings().DisplayDocTitle {
+				title = t
+			}
+			v.title = t
+		}
+		v.windowTitle = fmt.Sprintf("%s (%d pages)", title, v.doc.PageCount())
+	}
+	v.showTitle()
 }
 
 // showTitle titles the window after the document, marked while it has

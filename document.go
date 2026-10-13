@@ -727,8 +727,8 @@ func (d *Document) updateViewModeButton() {
 	d.viewModeButton.Refresh()
 }
 
-// renderThumbnails renders the thumbnail of page, or of all pages for -1,
-// in the background.
+// renderThumbnails renders the thumbnail of page, or of all pages for
+// allPages, in the background.
 func (d *Document) renderThumbnails(src *Source, ctx context.Context, page int) {
 	thumbnails, dpis := d.thumbnails, d.thumbnailDPIs
 	d.pending.Add(1)
@@ -835,7 +835,7 @@ func (d *Document) load(src *Source) {
 	d.loadAnnotations(src, ctx, numPages)
 
 	d.thumbnailDPIs = dpis
-	d.renderThumbnails(src, ctx, -1)
+	d.renderThumbnails(src, ctx, allPages)
 
 	d.updatePageEntry()
 
