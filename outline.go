@@ -160,6 +160,7 @@ func (d *Document) ShowOutline(show bool) {
 		} else {
 			d.outline.box.Hide()
 		}
+		d.left.Refresh()
 		d.base.Refresh()
 	}
 	d.updateOutlineButton()

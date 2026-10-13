@@ -20,7 +20,8 @@ no cgo PDF library, no external binaries.
   documents with hundreds of pages scroll smoothly
 - A PDF is opened the way it asks: at the page and view of its open
   action, with all pages one below the other for the layout "OneColumn",
-  with the outline for the page mode "UseOutlines" (`FollowViewSettings`,
+  with the outline for the page mode "UseOutlines" and the attachments for
+  "UseAttachments" (`FollowViewSettings`,
   on by default; `ViewSettings()` for what the PDF says). Full screen is
   never entered by the widget, and the layouts in two columns and the
   right-to-left page order are reported but not built
@@ -68,6 +69,13 @@ no cgo PDF library, no external binaries.
   annotation and marks it; a tap on an annotation on the page selects its
   row and shows the thread beside it. `Annotations(page)`,
   `ShowAnnotation(a)`; `Source.Annotations(page)` without the widget
+- Attachments: a side panel lists the files the document embeds — the XML
+  of an e-invoice (ZUGFeRD, Factur-X), source data — with name,
+  description and size, and saves one on request (`ShowAttachments`,
+  toolbar button while there are any). A tap on a file attachment
+  annotation selects its row. The widget never opens a file.
+  `Attachments()` and `Attachment.Open()`; `Source.Attachments()` and
+  `Annotation.File` without the widget
 - Text selection: `SetTool(pdf.ToolSelect)` (or the text button in the
   toolbar) selects text by dragging, a double click a word, Ctrl+A the
   page; Ctrl+C or `CopySelection` copies it unless the document forbids it

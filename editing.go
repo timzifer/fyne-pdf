@@ -274,6 +274,7 @@ func (d *Document) swapSource(src *Source, page int) {
 
 	d.selection = nil
 	d.comments.reset()
+	d.attachments.reset(src.Attachments())
 	d.loadAnnotations(src, ctx, src.PageCount())
 	if page != noPage {
 		d.renderThumbnails(src, ctx, page)
