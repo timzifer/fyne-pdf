@@ -81,6 +81,9 @@ no cgo PDF library, no external binaries.
   `Permissions()` (`PermPrint`, `PermCopy`, …) tell what the author allows —
   enforcing it is up to the application. `OpenSourceWithPassword`,
   `ErrPassword` and `ErrUnsupportedEncryption` for use without the widget
+- Fonts a PDF names but does not embed: `Document.Fonts` (and
+  `OpenSourceWith`) take a `cera.FontProvider`, such as the fonts of the
+  machine — see [Fonts](#fonts). Without one, cera's stand-ins draw them
 - Optional save button via `SaveCallback`, render errors via `OnError`
 - `Source`: goroutine-safe access to an opened PDF — page count, page bounds,
   rendering at arbitrary DPI (`RenderPageOptions` for link borders), document metadata, page text and search
@@ -188,6 +191,24 @@ The results are highlighted on the pages (`HighlightColor`,
 `Source.PageText` return the results and the text; `Rect`s are in points of
 the displayed page, origin top left. `Page.SetHighlights` marks any areas of
 a page.
+
+### Fonts
+
+A PDF that names "Segoe UI" or "MS Mincho" without embedding it is drawn
+with a stand-in. To use the fonts installed on the machine instead, give the
+widget the provider of cera's `fonts/system` module:
+
+```go
+import "github.com/timzifer/cera/fonts/system"
+
+fonts := system.New() // one for the program: it reads the font directories once, on first use
+doc.Fonts = fonts     // before LoadFromMemory
+```
+
+fyne-pdf does not import `fonts/system` or `fonts/cjk` itself, so the widget
+stays small and the application chooses; several providers combine as
+`cera.FontProviders{system.New(), cjk.Provider{…}}`. A page drawn with the
+fonts of the machine differs between machines.
 
 ### Render a page to an image
 
