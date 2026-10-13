@@ -114,9 +114,22 @@ type (
 		OnLoaded func()
 		// OnLinkTapped, if set, is called when a link on a page is
 		// tapped; returning true means it handled the link. Otherwise the
-		// widget goes to the link's destination, or opens its URI in the
-		// browser; it does not follow links to other files.
+		// widget goes to the link's destination, opens its URI in the
+		// browser, or follows its named action; a link to another PDF it
+		// has the system open after the user agreed in a dialog. It never
+		// starts a program, runs a script or sends a form.
 		OnLinkTapped func(Link) bool
+		// OnLinkHovered, if set, is called when the pointer comes over a
+		// link on a page, and with nil when it leaves one, to say what
+		// the link does: see [Link.Description].
+		OnLinkHovered func(*Link)
+		// OnPrint, if set, is called by a link that asks to print the
+		// document; without it such links do nothing.
+		OnPrint func()
+		// Dir is the directory the loaded PDF comes from, for its links to
+		// other PDFs that are named relative to it. The widget loads PDFs
+		// from memory and does not know it; set it with the PDF.
+		Dir string
 		// HighlightColor fills the search results on the pages,
 		// CurrentHighlightColor the current one. If nil, translucent
 		// yellow and orange are used.
@@ -193,6 +206,12 @@ type (
 		openURL func(*url.URL) error
 		// history are the versions of the file, one per change.
 		history editHistory
+		// jumps are the views to go back and forward to; hovered is the
+		// link under the pointer; fileDialog asks whether to open the
+		// file a link leads to.
+		jumps      viewHistory
+		hovered    *Link
+		fileDialog *dialog.ConfirmDialog
 		// search is the state of the search, see Document.Search.
 		search documentSearch
 		// modifiers returns the key modifiers held; replaced in tests.
@@ -484,6 +503,8 @@ func (d *Document) LoadFromMemory(contents []byte) error {
 // loaded shows src and tells OnLoaded.
 func (d *Document) loaded(src *Source) {
 	d.history.reset(src.contents, src.password)
+	d.jumps = viewHistory{}
+	d.hoverLink(nil)
 	d.load(src)
 	if d.OnLoaded != nil {
 		d.OnLoaded()
