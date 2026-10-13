@@ -29,9 +29,9 @@ var modifierKeys = []struct {
 // is released and required in go.mod.
 func currentKeyModifiers() fyne.KeyModifier {
 	if procGetAsyncKeyState.Find() != nil {
-		return driverKeyModifiers()
+		return driverKeyModifiers() | wheelModifiers()
 	}
-	var m fyne.KeyModifier
+	m := wheelModifiers()
 	for _, k := range modifierKeys {
 		// The most significant bit is set while the key is down.
 		if state, _, _ := procGetAsyncKeyState.Call(k.vk); state&0x8000 != 0 {
@@ -39,4 +39,13 @@ func currentKeyModifiers() fyne.KeyModifier {
 		}
 	}
 	return m
+}
+
+// wheelModifiers returns Ctrl while a wheel message that says it is down is
+// handled, as for a pinch on a touchpad (see hookWindow): no key is down.
+func wheelModifiers() fyne.KeyModifier {
+	if wheelControl {
+		return fyne.KeyModifierControl
+	}
+	return 0
 }

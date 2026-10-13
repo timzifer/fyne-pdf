@@ -39,7 +39,7 @@ const (
 type (
 	// pageArea is the content of the main scroll view. It shows the pages
 	// and handles the viewer gestures but the wheel: dragging to pan, double
-	// tap, and keyboard navigation once focused.
+	// tap, pinching on a touch screen, and keyboard navigation once focused.
 	//
 	// It must not be fyne.Scrollable: Fyne makes every Scrollable a clip of
 	// its own when finding the object under the pointer, in place of the
@@ -55,6 +55,14 @@ type (
 		// selecting is set while a drag selects text, dragging while any
 		// drag goes on.
 		selecting, dragging bool
+		// touches are the fingers on a touch screen by ID, at their
+		// positions in the view. fingers are the two that pinch, spread
+		// is their distance when the pinch began; pinched is when the
+		// last pinch ended.
+		touches map[int]fyne.Position
+		fingers [2]int
+		spread  float32
+		pinched time.Time
 	}
 
 	// pageScroll is the main scroll view. It handles the wheel: Ctrl+wheel
@@ -113,6 +121,7 @@ func newPageScroll(d *Document, content fyne.CanvasObject) *pageScroll {
 // bottom.
 func (a *pageScroll) Scrolled(ev *fyne.ScrollEvent) {
 	d := a.doc
+	d.watchWindow()
 	if d.zoomModifier() {
 		factor := math.Pow(zoomWheelFactor, float64(ev.Scrolled.DY)/wheelNotch)
 		d.zoomAt(d.scale*factor, ev.Position)
@@ -154,9 +163,13 @@ func (a *pageScroll) Scrolled(ev *fyne.ScrollEvent) {
 }
 
 // Dragged pans the page, or moves the selected annotation when it starts
-// on it; with a tool, it selects text or draws.
+// on it; with a tool, it selects text or draws. A pinch pans by itself: the
+// mobile driver reports its first finger as a drag as well.
 func (a *pageArea) Dragged(ev *fyne.DragEvent) {
 	d := a.doc
+	if d.pinch != nil {
+		return
+	}
 	switch {
 	case d.tool.selectsText():
 		if !a.selecting {
@@ -182,6 +195,7 @@ func (a *pageArea) Dragged(ev *fyne.DragEvent) {
 // DragEnd marks the selected text with a text markup tool, or adds what a
 // drawing tool drew.
 func (a *pageArea) DragEnd() {
+	a.liftAll()
 	a.dragging = false
 	d := a.doc
 	if d.moving != nil {
@@ -200,6 +214,9 @@ func (a *pageArea) DragEnd() {
 // focuses on MouseDown.
 func (a *pageArea) Tapped(ev *fyne.PointEvent) {
 	a.focus()
+	if a.afterPinch() {
+		return
+	}
 	d := a.doc
 	switch d.tool {
 	case ToolNote:
@@ -227,6 +244,9 @@ func (a *pageArea) Tapped(ev *fyne.PointEvent) {
 // DoubleTapped switches between the fitted page and 100 %, zooming in at
 // the tapped point; with ToolSelect, it selects the word.
 func (a *pageArea) DoubleTapped(ev *fyne.PointEvent) {
+	if a.afterPinch() {
+		return
+	}
 	d := a.doc
 	if d.tool.selectsText() {
 		d.selectWord(ev.Position)
@@ -312,7 +332,7 @@ func (a *pageArea) TypedKey(ev *fyne.KeyEvent) {
 
 // TypedShortcut zooms with Ctrl (Cmd on macOS) and +, - or 0; Ctrl+C
 // copies the selected text, Ctrl+A selects the text of the page with
-// ToolSelect.
+// ToolSelect; Alt+Left and Alt+Right go back and forward after a jump.
 func (a *pageArea) TypedShortcut(s fyne.Shortcut) {
 	switch s.(type) {
 	case *fyne.ShortcutCopy:
@@ -331,10 +351,22 @@ func (a *pageArea) TypedShortcut(s fyne.Shortcut) {
 		return
 	}
 	cs, ok := s.(*desktop.CustomShortcut)
-	if !ok || cs.Modifier&^fyne.KeyModifierShift != fyne.KeyModifierShortcutDefault {
+	if !ok {
 		return
 	}
 	d := a.doc
+	if cs.Modifier == fyne.KeyModifierAlt {
+		switch cs.KeyName {
+		case fyne.KeyLeft:
+			d.GoBack()
+		case fyne.KeyRight:
+			d.GoForward()
+		}
+		return
+	}
+	if cs.Modifier&^fyne.KeyModifierShift != fyne.KeyModifierShortcutDefault {
+		return
+	}
 	center := d.scrollContainer.Size()
 	anchor := fyne.NewPos(center.Width/2, center.Height/2)
 	switch cs.KeyName {
