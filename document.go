@@ -135,7 +135,10 @@ type (
 		thumbnailDPIs []float64
 		area          *pageArea
 
-		base               *fyne.Container
+		base *fyne.Container
+		// left holds the panels beside the pages on that side: the
+		// outline and the attachments.
+		left               *fyne.Container
 		thumbnailContainer *fyne.Container
 		thumbnailScroller  *container.Scroll
 		toolbar            *fyne.Container
@@ -146,6 +149,7 @@ type (
 		toggleThumbnailsButton *widget.Button
 		outlineButton          *widget.Button
 		commentsButton         *widget.Button
+		attachmentsButton      *widget.Button
 		viewModeButton         *widget.Button
 		toolButton             *widget.Button
 		zoomInButton           *widget.Button
@@ -194,9 +198,11 @@ type (
 		moving     *annotationMove
 		textDialog *dialog.FormDialog
 		textEntry  *widget.Entry
-		// outline is the outline panel, comments the comments panel.
-		outline  *outlinePanel
-		comments *commentsPanel
+		// outline is the outline panel, comments the comments panel,
+		// attachments the attachments panel.
+		outline     *outlinePanel
+		comments    *commentsPanel
+		attachments *attachmentsPanel
 		// openURL opens the URIs of outline entries; replaced in tests.
 		openURL func(*url.URL) error
 		// history are the versions of the file, one per change.
@@ -378,6 +384,14 @@ func NewDocument() *Document {
 	d.commentsButton.Importance = widget.LowImportance
 	d.commentsButton.Hidden = true
 
+	d.attachments = newAttachmentsPanel(d)
+	d.attachmentsButton = widget.NewButton("", func() {
+		d.ShowAttachments(!d.AttachmentsShown())
+	})
+	d.attachmentsButton.Icon = fyne_lucide.Icon(fyne_lucide.IconPaperclip)
+	d.attachmentsButton.Importance = widget.LowImportance
+	d.attachmentsButton.Hidden = true
+
 	d.toolbar.Add(d.outlineButton)
 	d.toolbar.Add(d.toggleThumbnailsButton)
 	d.toolbar.Add(layout.NewSpacer())
@@ -393,6 +407,7 @@ func NewDocument() *Document {
 	d.toolbar.Add(d.viewModeButton)
 	d.toolbar.Add(d.toolButton)
 	d.toolbar.Add(d.commentsButton)
+	d.toolbar.Add(d.attachmentsButton)
 	d.toolbar.Add(d.saveButton)
 
 	bottom := container.NewVBox(
@@ -401,9 +416,10 @@ func NewDocument() *Document {
 	)
 	// The view changes size with the window, but also when the thumbnail
 	// strip, the outline or the comments are shown or hidden.
+	d.left = container.NewHBox(d.outline.box, d.attachments.box)
 	d.base = container.New(
-		&afterLayout{layout: layout.NewBorderLayout(nil, bottom, d.outline.box, d.comments.box), after: d.viewResized},
-		bottom, d.outline.box, d.comments.box, d.scrollContainer,
+		&afterLayout{layout: layout.NewBorderLayout(nil, bottom, d.left, d.comments.box), after: d.viewResized},
+		bottom, d.left, d.comments.box, d.scrollContainer,
 	)
 
 	d.ExtendBaseWidget(d)
@@ -781,6 +797,7 @@ func (d *Document) load(src *Source) {
 	d.outline.setItems(src.Outline())
 	d.ShowOutline(d.OutlineShown())
 	d.comments.reset()
+	d.attachments.reset(src.Attachments())
 	d.loadAnnotations(src, ctx, numPages)
 
 	d.thumbnailDPIs = dpis

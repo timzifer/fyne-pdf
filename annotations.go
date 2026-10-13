@@ -46,6 +46,9 @@ type (
 		Group   bool
 		// Popup is the window that shows the text, nil for none.
 		Popup *AnnotationPopup
+		// File is the file a FileAttachment annotation embeds, nil for
+		// other annotations.
+		File *Attachment
 	}
 
 	// AnnotationPopup is the window of an annotation that shows its text.
@@ -110,6 +113,10 @@ func (s *Source) Annotations(page int) ([]Annotation, error) {
 		}
 		if pp := m.Popup; pp != nil {
 			annot.Popup = &AnnotationPopup{Bounds: rectOf(pp.Bounds), Open: pp.Open}
+		}
+		if a.File != nil {
+			file := s.attachment(a.File, page, a.Index)
+			annot.File = &file
 		}
 		out = append(out, annot)
 	}

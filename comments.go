@@ -379,6 +379,7 @@ func (d *Document) loadAnnotations(src *Source, ctx context.Context, pages int) 
 			d.runOnMain(func() {
 				if ctx.Err() == nil {
 					d.comments.addPage(page, annots)
+					d.attachments.addPage(annots)
 				}
 			})
 		}
@@ -438,6 +439,10 @@ func (d *Document) selectAnnotation(a Annotation, reveal, popup bool) {
 		d.revealRect(a.Page, a.Bounds)
 	}
 	d.comments.selectAnnotation(annotKey{a.Page, a.Index})
+	if a.File != nil && !reveal {
+		// Tapped on the page: its file in the attachments panel.
+		d.attachments.selectAnnotation(a)
+	}
 	if popup {
 		d.comments.showPopup(a)
 	}

@@ -77,8 +77,11 @@ func (d *Document) followViewSettings(src *Source) {
 	}
 	// The thumbnails of "UseThumbs" are shown anyway; never full screen
 	// without the user: that is the application's to offer.
-	if v.PageMode == "UseOutlines" {
+	switch v.PageMode {
+	case "UseOutlines":
 		d.ShowOutline(true)
+	case "UseAttachments":
+		d.ShowAttachments(true)
 	}
 	if v.Open != nil {
 		d.GoTo(*v.Open)
