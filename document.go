@@ -104,6 +104,10 @@ type (
 		OnToolChanged func()
 		// Author is the author of the annotations made with the tools.
 		Author string
+		// Fonts supplies the fonts a PDF names but does not embed, see
+		// [SourceOptions]; PDFs loaded after it is set use it. If nil,
+		// such fonts are drawn with the stand-ins cera has built in.
+		Fonts cera.FontProvider
 		// AnnotationColor is the colour of the annotations made with the
 		// tools; if nil, yellow for highlights and notes, red for
 		// drawings and shapes, black for underlines and strikethroughs.
@@ -465,7 +469,7 @@ func (d *Document) closeLocked() error {
 // [ErrPassword].
 func (d *Document) LoadFromMemory(contents []byte) error {
 	d.cancelPassword()
-	src, err := OpenSource(contents)
+	src, err := d.open(contents, "")
 	if errors.Is(err, ErrPassword) {
 		if d.PasswordCallback != nil {
 			src, err = d.askPassword(contents)
@@ -479,6 +483,12 @@ func (d *Document) LoadFromMemory(contents []byte) error {
 	}
 	d.loaded(src)
 	return nil
+}
+
+// open opens contents, a PDF or a version of the one loaded, with the
+// options of the widget.
+func (d *Document) open(contents []byte, password string) (*Source, error) {
+	return OpenSourceWith(contents, SourceOptions{Password: password, Fonts: d.Fonts})
 }
 
 // loaded shows src and tells OnLoaded.
@@ -497,7 +507,7 @@ func (d *Document) askPassword(contents []byte) (*Source, error) {
 		if !ok {
 			return nil, errors.Wrap(ErrPassword, "no password given")
 		}
-		src, err := OpenSourceWithPassword(contents, password)
+		src, err := d.open(contents, password)
 		if !errors.Is(err, ErrPassword) {
 			return src, err
 		}
@@ -524,7 +534,7 @@ func (d *Document) showPasswordDialog(w fyne.Window, contents []byte, load int, 
 		if !ok {
 			return
 		}
-		src, err := OpenSourceWithPassword(contents, entry.Text)
+		src, err := d.open(contents, entry.Text)
 		switch {
 		case errors.Is(err, ErrPassword):
 			d.showPasswordDialog(w, contents, load, true)

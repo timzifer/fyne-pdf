@@ -40,6 +40,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
+	"github.com/timzifer/cera/fonts/system"
 	pdf "github.com/timzifer/fyne-pdf"
 	"github.com/timzifer/fyne_lucide"
 	"github.com/timzifer/goprint"
@@ -85,6 +86,13 @@ func main() {
 	defer func() { _ = v.doc.Close() }()
 	// All pages one below the other; the toolbar switches to single pages.
 	v.doc.SetViewMode(pdf.ViewContinuous)
+
+	// Fonts a PDF names but does not embed are those of the machine, if it
+	// has them. One provider for the program: it reads the font
+	// directories once, here in the background.
+	fonts := system.New()
+	go fonts.Faces()
+	v.doc.Fonts = fonts
 
 	// Render errors arrive on the main goroutine; a broken page should not
 	// end the program.

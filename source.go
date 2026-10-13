@@ -89,14 +89,32 @@ func OpenSource(contents []byte) (*Source, error) {
 // wrapping [ErrPassword], encryption that cannot be read one wrapping
 // [ErrUnsupportedEncryption].
 func OpenSourceWithPassword(contents []byte, password string) (*Source, error) {
+	return OpenSourceWith(contents, SourceOptions{Password: password})
+}
+
+// SourceOptions say how [OpenSourceWith] opens a PDF.
+type SourceOptions struct {
+	// Password opens an encrypted PDF, see [OpenSourceWithPassword].
+	Password string
+	// Fonts supplies the fonts the PDF names but does not embed: those
+	// of the machine (github.com/timzifer/cera/fonts/system), CJK fonts
+	// (github.com/timzifer/cera/fonts/cjk), or several as a
+	// [cera.FontProviders]. If nil, such fonts are drawn with the
+	// stand-ins cera has built in.
+	Fonts cera.FontProvider
+}
+
+// OpenSourceWith parses the PDF in contents with options. The errors are
+// those of [OpenSourceWithPassword].
+func OpenSourceWith(contents []byte, opt SourceOptions) (*Source, error) {
 	if len(contents) == 0 {
 		return nil, errors.New("could not open pdf: empty contents")
 	}
-	doc, err := cera.OpenWithPassword(contents, password)
+	doc, err := cera.OpenWith(contents, cera.OpenOptions{Password: opt.Password, Fonts: opt.Fonts})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open pdf")
 	}
-	return &Source{doc: doc, contents: contents, password: password}, nil
+	return &Source{doc: doc, contents: contents, password: opt.Password}, nil
 }
 
 // Encrypted reports whether the PDF is encrypted; false after Close.

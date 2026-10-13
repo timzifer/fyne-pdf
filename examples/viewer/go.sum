@@ -102,6 +102,8 @@ github.com/tannevaled/gobig2 v0.2.0 h1:yx97/ltljALrIWDFVqHjPUIjAp3bfUUhH8Z8UROvN
 github.com/tannevaled/gobig2 v0.2.0/go.mod h1:X0S1H+N35kg6zYgVYRqGMsGj3C35zs+iA2r1MXyPcV4=
 github.com/timzifer/cera v0.10.0 h1:TWBFguqUKDvyxsUQXgudjHWn/PpHufao7KIWzcWgGpk=
 github.com/timzifer/cera v0.10.0/go.mod h1:eKDl9jwxTZpp4iDjHKoyADR/8jlCKUZVsyo/ElMVW28=
+github.com/timzifer/cera/fonts/system v0.0.0-20261013080652-b12ba149dcf0 h1:5/Voun0o44IWBYTcPVUN2lwrt86e574F9zoKwTcXYXM=
+github.com/timzifer/cera/fonts/system v0.0.0-20261013080652-b12ba149dcf0/go.mod h1:Fv33vDlxFPKsOt8sPcRo09J/wJPdayAbSFHngbtKtkE=
 github.com/timzifer/fyne_iconkit v0.1.0 h1:wV5BTYlf4aQLvytjD5ko652t8l084hUb3srAgA4d1R4=
 github.com/timzifer/fyne_iconkit v0.1.0/go.mod h1:ggIwGNaasc8fz5UHvY7+lJwLHTNsMMDenqCZ71zDxY8=
 github.com/timzifer/fyne_lucide v1.2.0 h1:0wHikxvAl+Qkwc2HPCJt9aSv3O7v64hiWCLnEWUHqPo=
