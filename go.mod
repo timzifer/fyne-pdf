@@ -3,12 +3,12 @@ module github.com/timzifer/fyne-pdf
 go 1.27.1
 
 require (
-	fyne.io/fyne/v2 v2.8.1
+	fyne.io/fyne/v2 v2.8.2
 	github.com/cockroachdb/errors v1.14.0
-	github.com/timzifer/cera v0.10.0
+	github.com/timzifer/cera v0.12.0
 	github.com/timzifer/fyne_lucide v1.2.0
 	github.com/timzifer/fyne_tabler v1.2.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 )
 
 require (
@@ -21,7 +21,7 @@ require (
 	github.com/cockroachdb/redact v1.1.5 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fyne-io/gl-js v0.2.1-0.20260315212741-029c47fd27e8 // indirect
-	github.com/fyne-io/oksvg v0.2.0 // indirect
+	github.com/fyne-io/oksvg v0.2.1-0.20260918172519-a9af55fa95d9 // indirect
 	github.com/getsentry/sentry-go v0.46.0 // indirect
 	github.com/go-gl/gl v0.0.0-20260331235117-4566fea9a276 // indirect
 	github.com/go-images/jpeg v0.3.0 // indirect
@@ -29,7 +29,7 @@ require (
 	github.com/go-opentype/fonts v0.12.0 // indirect
 	github.com/go-opentype/opentype v0.15.0 // indirect
 	github.com/go-text/render v0.2.1 // indirect
-	github.com/go-text/typesetting v0.3.4 // indirect
+	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
@@ -48,7 +48,7 @@ require (
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tannevaled/gobig2 v0.2.0 // indirect
 	github.com/timzifer/fyne_iconkit v0.1.0 // indirect
-	github.com/timzifer/stilus v0.9.0 // indirect
+	github.com/timzifer/stilus v0.11.0 // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
