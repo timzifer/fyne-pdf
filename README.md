@@ -113,6 +113,10 @@ no cgo PDF library, no external binaries.
   order, so search finds it as it is typed; DeviceCMYK is drawn through the
   output intent of a PDF/X or PDF/A file, grey and RGB ICC profiles built
   from lookup tables are read, transfer functions apply to images
+- With cera v0.12.0: a variable font from a `FontProvider` (such as the CJK
+  fonts of the machine) is drawn at the weight the document asks for instead
+  of its default, often Thin; annotation appearances are clipped to whole
+  pixels, so field borders no longer lighten at the edge
 
 ## Installation
 

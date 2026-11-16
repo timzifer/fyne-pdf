@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	fyne.io/fyne/v2 v2.8.1
-	github.com/timzifer/cera/fonts/system v0.0.0-20261013080652-b12ba149dcf0
+	github.com/timzifer/cera/fonts/system v0.0.0-20261116070648-541ea48d480a
 	github.com/timzifer/fyne-pdf v0.7.0
 	github.com/timzifer/fyne_lucide v1.2.0
 	github.com/timzifer/goprint v0.6.0
