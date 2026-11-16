@@ -124,12 +124,9 @@ no cgo PDF library, no external binaries.
 go get github.com/timzifer/fyne-pdf
 ```
 
-Requires Go 1.27.1+, Fyne 2.6+ (uses `fyne.Do`) and cera v0.12.0+. This
-module, like cera, replaces `github.com/ajroetker/go-highway` with
-`github.com/timzifer/go-highway v0.0.13-timzifer.1`; replace directives do not
-carry over to dependents, so add the same line to your `go.mod` if you want
-the identical SIMD code paths (it builds without). Fyne itself needs a C
-compiler and the platform graphics headers — see the [Fyne prerequisites](https://docs.fyne.io/started/).
+Requires Go 1.27.1+, Fyne 2.6+ (uses `fyne.Do`) and cera v0.13.0+. Fyne
+itself needs a C compiler and the platform graphics headers — see the
+[Fyne prerequisites](https://docs.fyne.io/started/).
 
 ## Usage
 
