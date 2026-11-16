@@ -5,10 +5,10 @@ go 1.27.1
 require (
 	fyne.io/fyne/v2 v2.8.1
 	github.com/timzifer/cera/fonts/system v0.0.0-20261013080652-b12ba149dcf0
-	github.com/timzifer/fyne-pdf v0.4.0
+	github.com/timzifer/fyne-pdf v0.7.0
 	github.com/timzifer/fyne_lucide v1.2.0
-	github.com/timzifer/goprint v0.5.0
-	github.com/timzifer/goprint/fyneprint v0.5.0
+	github.com/timzifer/goprint v0.6.0
+	github.com/timzifer/goprint/fyneprint v0.6.1
 )
 
 require (
@@ -63,7 +63,7 @@ require (
 	github.com/timzifer/stilus v0.20.0 // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/image v0.46.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
