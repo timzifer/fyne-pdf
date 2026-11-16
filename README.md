@@ -113,6 +113,10 @@ no cgo PDF library, no external binaries.
   order, so search finds it as it is typed; DeviceCMYK is drawn through the
   output intent of a PDF/X or PDF/A file, grey and RGB ICC profiles built
   from lookup tables are read, transfer functions apply to images
+- With cera v0.12.0: a variable font from a `FontProvider` (such as the CJK
+  fonts of the machine) is drawn at the weight the document asks for instead
+  of its default, often Thin; annotation appearances are clipped to whole
+  pixels, so field borders no longer lighten at the edge
 
 ## Installation
 
@@ -120,7 +124,7 @@ no cgo PDF library, no external binaries.
 go get github.com/timzifer/fyne-pdf
 ```
 
-Requires Go 1.27.1+, Fyne 2.6+ (uses `fyne.Do`) and cera v0.10.0+. This
+Requires Go 1.27.1+, Fyne 2.6+ (uses `fyne.Do`) and cera v0.12.0+. This
 module, like cera, replaces `github.com/ajroetker/go-highway` with
 `github.com/timzifer/go-highway v0.0.13-timzifer.1`; replace directives do not
 carry over to dependents, so add the same line to your `go.mod` if you want

@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	fyne.io/fyne/v2 v2.8.1
 	github.com/cockroachdb/errors v1.14.0
-	github.com/timzifer/cera v0.10.0
+	github.com/timzifer/cera v0.12.0
 	github.com/timzifer/fyne_lucide v1.2.0
 	github.com/timzifer/fyne_tabler v1.2.0
 	golang.org/x/sys v0.48.0
@@ -48,7 +48,7 @@ require (
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tannevaled/gobig2 v0.2.0 // indirect
 	github.com/timzifer/fyne_iconkit v0.1.0 // indirect
-	github.com/timzifer/stilus v0.9.0 // indirect
+	github.com/timzifer/stilus v0.11.0 // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
